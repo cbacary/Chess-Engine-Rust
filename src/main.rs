@@ -1,6 +1,4 @@
 use chess::{Board, MoveGen, ChessMove, Square, Color, Piece, BoardStatus, BitBoard};
-use gtk::gdk::keys::constants::R;
-use std::cmp;
 
 static PAWN_VALUES: &'static [f64] =    &[0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
                                         5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,
@@ -52,7 +50,6 @@ static KING_VALUES: &'static [f64] =    &[-3.0, -4.0, -4.0, -5.0, -5.0, -4.0, -4
                                         2.0,  3.0,  1.0,  0.0,  0.0,  1.0,  3.0,  2.0];
                       
                                         
-static mut count: i32 = 0;
 
 struct ReturnValue {
     best_move: Option<ChessMove>,
@@ -71,22 +68,22 @@ fn calculate_position(board: &Board) -> f64 {
         let piece = board.piece_on(x);
         match piece {
             Some(Piece::Pawn) => {
-                position_value += 10.0 + PAWN_VALUES[square_index];
+                position_value += 10.0 + PAWN_VALUES[square_index] * 2.0;
             },
             Some(Piece::Knight) => {
-                position_value += 35.0 + KNIGHT_VALUES[square_index];
+                position_value += 35.0 + KNIGHT_VALUES[square_index] * 2.0;
             },
             Some(Piece::Bishop) => {
-                position_value += 37.5 + BISHOP_VALUES[square_index];
+                position_value += 37.5 + BISHOP_VALUES[square_index] * 2.0;
             },
             Some(Piece::Rook)  => {
-                position_value += 52.5 + ROOK_VALUES[square_index];
+                position_value += 52.5 + ROOK_VALUES[square_index] * 2.0;
             },
             Some(Piece::Queen) => {
-                position_value += 100.0 + QUEEN_VALUES[square_index];
+                position_value += 100.0 + QUEEN_VALUES[square_index] * 2.0;
             },
             Some(Piece::King) => {
-                position_value += 1000.0 + KING_VALUES[square_index];
+                position_value += 1000.0 + KING_VALUES[square_index] * 2.0;
             },
             _ => ()
         }
@@ -104,22 +101,22 @@ fn calculate_position(board: &Board) -> f64 {
         let piece = board.piece_on(x);
         match piece {
             Some(Piece::Pawn) => {
-                position_value -= 10.0 + PAWN_VALUES[square_index];
+                position_value -= 10.0 + PAWN_VALUES[square_index] * 2.0;
             },
             Some(Piece::Knight) => {
-                position_value -= 35.0 + KNIGHT_VALUES[square_index];
+                position_value -= 35.0 + KNIGHT_VALUES[square_index] * 2.0;
             },
             Some(Piece::Bishop) => {
-                position_value -= 37.5 + BISHOP_VALUES[square_index];
+                position_value -= 37.5 + BISHOP_VALUES[square_index] * 2.0;
             },
             Some(Piece::Rook)  => {
-                position_value -= 52.5 + ROOK_VALUES[square_index];
+                position_value -= 52.5 + ROOK_VALUES[square_index] * 2.0;
             },
             Some(Piece::Queen) => {
-                position_value -= 100.0 + QUEEN_VALUES[square_index];
+                position_value -= 100.0 + QUEEN_VALUES[square_index] * 2.0;
             },
             Some(Piece::King) => {
-                position_value -= 1000.0 + KING_VALUES[square_index];
+                position_value -= 1000.0 + KING_VALUES[square_index] * 2.0;
             },
             _ => ()
         }
@@ -131,7 +128,6 @@ fn calculate_position(board: &Board) -> f64 {
 
 fn calculate_move(board: &Board, depth: u8, original_depth: u8, player: bool, optimizing_color: Color, mut alpha: f64, mut beta: f64) -> ReturnValue {
     let status = board.status();
-    unsafe {count += 1;}
     if depth == 0 || status != BoardStatus::Ongoing {
         if optimizing_color == Color::White {
             match status {
@@ -239,6 +235,61 @@ fn calculate_move(board: &Board, depth: u8, original_depth: u8, player: bool, op
     }
 }
 
+fn generate_pgn(board: &Board, chess_move: &Option<ChessMove>, color: Color, current_pgn: &String, move_number: i32) -> String{
+    match *chess_move {
+        Some(i) => {
+            let destination = i.get_dest().to_string();
+
+            // Get piece being moved
+            let piece_str = match board.piece_on(i.get_source()) {
+                Some(Piece::Pawn) => "".to_owned(),
+                Some(i) => {
+                    format!("{i}").to_uppercase()
+                },
+                _ => "".to_owned()
+            };
+
+            // Check if a capture
+            let capture = match board.piece_on(i.get_dest()) {
+                Some(i) => "x",
+                None => "",
+            };
+
+            // Check white or black, create beginning
+            let beginnging = match color {
+                Color::White => {
+                    let move_num = (move_number / 2) + 1 as i32;
+                    format!("{move_num}. ")
+                },
+                Color::Black => {
+                    format!(" ")
+                }
+            };
+
+            let new_board = board.make_move_new(i);
+
+            // Make move
+            println!("{}{}", i.get_source(), i.get_dest());
+
+            // Check if a check
+            let checkers = new_board.checkers();
+            let mut check = "".to_owned();
+            println!("{}", checkers.0);
+            if checkers.0 > 0 {
+                check = "+".to_owned();
+            }
+            let full_string = format!("{beginnging}{piece_str}{capture}{destination}{check} ");
+
+            let pgn = format!("{current_pgn}{full_string}");
+
+            return pgn;
+        },
+        None => {println!("error"); return String::from("")} 
+    }
+    
+
+}
+
 fn main() {
 
     let mut board = Board::default();
@@ -247,22 +298,27 @@ fn main() {
 
     let mut player = true;
     let mut optimizing_color = Color::White;
+    let initial_color = Color::White;
 
-    for i in 1..10 {
+    let mut pgn = "".to_owned();
+
+    for x in 1..10 {
         let calculated_move = calculate_move(&board, 4, 4, player, optimizing_color, -999999.0, 999999.0);
+
+        pgn = generate_pgn(&board, &calculated_move.best_move, optimizing_color, &pgn, x);
 
         match calculated_move.best_move {
             Some(i) => {
+                // Make move
                 board = board.make_move_new(i);
-                println!("{}{}", i.get_source(), i.get_dest());
             },
             None => {println!("error"); break;} 
         }
         player = !player;
         if optimizing_color == Color::White {optimizing_color = Color::Black;} else {optimizing_color = Color::White;}
-        unsafe {println!("{}", count); count = 0;}
     }
 
+    println!("{}", pgn);
 
 
 }
