@@ -1,10 +1,10 @@
-use chess::{Board, MoveGen, ChessMove, Square, Color, Piece, BoardStatus};
+use chess::{Board, MoveGen, ChessMove, Square, Color, Piece, BoardStatus, EMPTY};
 
 static PAWN_VALUES: &'static [f64] =    &[0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
                                         5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,
-                                        1.0,  1.0,  2.0,  3.0,  3.0,  2.0,  1.0,  1.0,
-                                        0.5,  0.5,  1.0,  2.5,  2.5,  1.0,  0.5,  0.5,
-                                        0.0,  0.0,  0.0,  2.0,  2.0,  0.0,  0.0,  0.0,
+                                        2.0,  1.0,  2.0,  3.0,  3.0,  2.0,  1.0,  1.0,
+                                        1.0,  0.5,  1.0,  2.5,  2.5,  1.0,  0.5,  0.5,
+                                        0.75,  0.0,  0.0,  2.0,  2.0,  0.0,  0.0,  0.0,
                                         0.5, -0.5, -1.0,  0.0,  0.0, -1.0, -0.5,  0.5,
                                         0.5,  1.0, 1.0,  -2.0, -2.0,  1.0,  1.0,  0.5,
                                         0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0];
@@ -67,22 +67,22 @@ fn calculate_position(board: &Board) -> f64 {
         let piece = board.piece_on(x);
         match piece {
             Some(Piece::Pawn) => {
-                position_value += 10.0 + PAWN_VALUES[square_index] * 1.5;
+                position_value += 10.0 + PAWN_VALUES[square_index] * 2.0;
             },
             Some(Piece::Knight) => {
-                position_value += 35.0 + KNIGHT_VALUES[square_index] * 1.5;
+                position_value += 35.0 + KNIGHT_VALUES[square_index] * 2.0;
             },
             Some(Piece::Bishop) => {
-                position_value += 37.5 + BISHOP_VALUES[square_index] * 1.5;
+                position_value += 37.5 + BISHOP_VALUES[square_index] * 2.0;
             },
             Some(Piece::Rook)  => {
-                position_value += 52.5 + ROOK_VALUES[square_index] * 1.5;
+                position_value += 52.5 + ROOK_VALUES[square_index] * 2.0;
             },
             Some(Piece::Queen) => {
-                position_value += 100.0 + QUEEN_VALUES[square_index] * 1.5;
+                position_value += 100.0 + QUEEN_VALUES[square_index] * 2.0;
             },
             Some(Piece::King) => {
-                position_value += 1000.0 + KING_VALUES[square_index] * 1.5;
+                position_value += 1000.0 + KING_VALUES[square_index] * 2.0;
             },
             _ => ()
         }
@@ -100,22 +100,22 @@ fn calculate_position(board: &Board) -> f64 {
         let piece = board.piece_on(x);
         match piece {
             Some(Piece::Pawn) => {
-                position_value -= 10.0 + PAWN_VALUES[square_index] * 1.5;
+                position_value -= 10.0 + PAWN_VALUES[square_index] * 2.0;
             },
             Some(Piece::Knight) => {
-                position_value -= 35.0 + KNIGHT_VALUES[square_index] * 1.5;
+                position_value -= 35.0 + KNIGHT_VALUES[square_index] * 2.0;
             },
             Some(Piece::Bishop) => {
-                position_value -= 37.5 + BISHOP_VALUES[square_index] * 1.5;
+                position_value -= 37.5 + BISHOP_VALUES[square_index] * 2.0;
             },
             Some(Piece::Rook)  => {
-                position_value -= 52.5 + ROOK_VALUES[square_index] * 1.5;
+                position_value -= 52.5 + ROOK_VALUES[square_index] * 2.0;
             },
             Some(Piece::Queen) => {
-                position_value -= 100.0 + QUEEN_VALUES[square_index] * 1.5;
+                position_value -= 100.0 + QUEEN_VALUES[square_index] * 2.0;
             },
             Some(Piece::King) => {
-                position_value -= 1000.0 + KING_VALUES[square_index] * 1.5;
+                position_value -= 1000.0 + KING_VALUES[square_index] * 2.0;
             },
             _ => ()
         }
@@ -134,10 +134,26 @@ fn calculate_move(board: &Board, depth: u8, original_depth: u8, player: bool, op
                 position_evaluation: calculate_position(board)
             },
             BoardStatus::Checkmate => {
-                let eval = if optimizing_color == Color::White {999999.0} else {-999999.0};
+                // Optimizing for white
+                //  find mate when player is true (meaning white gets mated):
+                //      - return lowest possible number, since bad for white
+                //  find mate when player is false (meaning black gets mated by white):
+                //      - return highest possible number, since good for wwhite
+                
+                // Optimizing for black
+                //  find mate when player is true (meaning white gets mated):
+                //      - return lowest possible number, since good for black
+                //  find mate when player is false (meaning black gets mated by white):
+                //      - return highest possible number, since bad for blacck
+                // let mut eval = 0.0;
+                // if optimizing_color == Color::White {
+                //     eval = if player {-999999.0} else {999999.0} 
+                // } else {
+                //     eval = if player {d}
+                // }
                 return ReturnValue  { 
                     best_move: None,
-                    position_evaluation: if player {eval} else {-eval}
+                    position_evaluation: if player {-999999.0} else {999999.0}
                 }
             },
             BoardStatus::Stalemate => return ReturnValue {
@@ -146,35 +162,48 @@ fn calculate_move(board: &Board, depth: u8, original_depth: u8, player: bool, op
             }
         }
     }
-    let mut current_best_move = Some(ChessMove::new(Square::A1, Square::H8, None));
-    let movegen =  MoveGen::new_legal(&board);
+    let mut current_best_move = None;
+    
+    let targets = board.color_combined(!board.side_to_move());
+
+    let mut attack_moves =  MoveGen::new_legal(&board);
+    attack_moves.set_iterator_mask(*targets);
+
+    let mut empty_moves = MoveGen::new_legal(&board);
+    empty_moves.set_iterator_mask(!EMPTY);
+
+
     if player {
         let mut value = -999999.0;
         let mut best_value_move = -999999.0;
         
-        for legal_move in movegen {
+        for set in [attack_moves, empty_moves] {
+            for legal_move in set {
 
-            // Make move
-            let new_board = board.make_move_new(legal_move);
+                if current_best_move == None {
+                    current_best_move = Some(legal_move);
+                }
 
-            // Calculate value of line
-            let node_value = calculate_move(&new_board, depth - 1, original_depth, false, optimizing_color, alpha, beta);
-            
-            value = f64::max(value, node_value.position_evaluation);    
+                // Make move
+                let new_board = board.make_move_new(legal_move);
 
+                // Calculate value of line
+                let node_value = calculate_move(&new_board, depth - 1, original_depth, false, optimizing_color, alpha, beta);
 
-            // Prune or not to prune
-            if value >= beta {
-                break;
+                value = f64::max(value, node_value.position_evaluation);    
+                
+                // Prune or not to prune
+                if beta <= alpha {
+                    break;
+                }
+
+                if value > best_value_move {
+                    best_value_move = value;
+                    current_best_move = Some(legal_move);
+                }
+
+                alpha = f64::max(alpha, value);
             }
-
-            if value > best_value_move {
-                best_value_move = value;
-                current_best_move = Some(legal_move);
-            }
-
-            alpha = f64::max(alpha, value);
-
         }
         if depth == original_depth {
             println!("White: {}", best_value_move);
@@ -187,29 +216,34 @@ fn calculate_move(board: &Board, depth: u8, original_depth: u8, player: bool, op
         let mut value = 999999.0;
         let mut best_value_move = 999999.0;
 
-        for legal_move in movegen {
-            
-            // Make move
-            let new_board = board.make_move_new(legal_move);
+        for set in [attack_moves, empty_moves] {
+            for legal_move in set {
 
-            // Calculate value of line
-            let node_value = calculate_move(&new_board, depth - 1, original_depth, true, optimizing_color, alpha, beta);
-            
-            value = f64::min(value, node_value.position_evaluation);
-            
+                if current_best_move == None {
+                    current_best_move = Some(legal_move);
+                }
 
-            // Prune or not to prune
-            if value <= alpha {
-                break;
+                // Make move
+                let new_board = board.make_move_new(legal_move);
+
+                // Calculate value of line
+                let node_value = calculate_move(&new_board, depth - 1, original_depth, true, optimizing_color, alpha, beta);
+                
+                value = f64::min(value, node_value.position_evaluation);
+                
+
+                // Prune or not to prune
+                if beta <= alpha {
+                    break;
+                }
+
+                if value < best_value_move {
+                    best_value_move = value;
+                    current_best_move = Some(legal_move);
+                }
+
+                beta = f64::min(beta, value);
             }
-
-            if value < best_value_move {
-                best_value_move = value;
-                current_best_move = Some(legal_move);
-            }
-
-            beta = f64::min(beta, value);
-
         }
         if depth == original_depth {
             println!("Black: {}", best_value_move);
@@ -270,15 +304,12 @@ fn generate_pgn(board: &Board, chess_move: &Option<ChessMove>, color: Color, cur
                 None => "",
             };
 
-            let new_board = board.make_move_new(i);
-
             // Make move
-            println!("{}{}", i.get_source(), i.get_dest());
+            let new_board = board.make_move_new(i);
 
             // Check if a check
             let checkers = new_board.checkers();
             let mut check = "".to_owned();
-            println!("{}", checkers.0);
             if checkers.0 > 0 {
                 check = "+".to_owned();
             }
@@ -298,14 +329,17 @@ fn main() {
 
     let mut board = Board::default();
 
-    println!("peft 4: {}", MoveGen::movegen_perft_test(&board, 4));
-
     let mut player = true;
     let mut optimizing_color = Color::White;
 
     let mut pgn = "".to_owned();
 
-    for x in 1..100 {
+    for x in 1..200 {
+
+        if board.status() == BoardStatus::Checkmate || board.status() == BoardStatus::Stalemate {
+            break;
+        }
+
         let calculated_move = calculate_move(&board, 4, 4, player, optimizing_color, -999999.0, 999999.0);
 
         pgn = generate_pgn(&board, &calculated_move.best_move, optimizing_color, &pgn, x);
@@ -315,11 +349,13 @@ fn main() {
                 // Make move
                 board = board.make_move_new(i);
             },
-            None => {println!("error"); break;} 
+            None => {println!("chess move invalid"); break;} 
         }
         player = !player;
         if optimizing_color == Color::White {optimizing_color = Color::Black;} else {optimizing_color = Color::White;}
     }
+
+    println!("{}", format!("{board}"));
 
     println!("{}", pgn);
 
