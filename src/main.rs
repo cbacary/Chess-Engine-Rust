@@ -1,4 +1,4 @@
-use chess::{Board, MoveGen, ChessMove, Square, Color, Piece, BoardStatus, BitBoard};
+use chess::{Board, MoveGen, ChessMove, Square, Color, Piece, BoardStatus};
 
 static PAWN_VALUES: &'static [f64] =    &[0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
                                         5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,
@@ -49,8 +49,7 @@ static KING_VALUES: &'static [f64] =    &[-3.0, -4.0, -4.0, -5.0, -5.0, -4.0, -4
                                         2.0,  2.0,  0.0,  0.0,  0.0,  0.0,  2.0,  2.0,
                                         2.0,  3.0,  1.0,  0.0,  0.0,  1.0,  3.0,  2.0];
                       
-                                        
-
+               
 struct ReturnValue {
     best_move: Option<ChessMove>,
     position_evaluation: f64
@@ -68,22 +67,22 @@ fn calculate_position(board: &Board) -> f64 {
         let piece = board.piece_on(x);
         match piece {
             Some(Piece::Pawn) => {
-                position_value += 10.0 + PAWN_VALUES[square_index] * 2.0;
+                position_value += 10.0 + PAWN_VALUES[square_index] * 1.5;
             },
             Some(Piece::Knight) => {
-                position_value += 35.0 + KNIGHT_VALUES[square_index] * 2.0;
+                position_value += 35.0 + KNIGHT_VALUES[square_index] * 1.5;
             },
             Some(Piece::Bishop) => {
-                position_value += 37.5 + BISHOP_VALUES[square_index] * 2.0;
+                position_value += 37.5 + BISHOP_VALUES[square_index] * 1.5;
             },
             Some(Piece::Rook)  => {
-                position_value += 52.5 + ROOK_VALUES[square_index] * 2.0;
+                position_value += 52.5 + ROOK_VALUES[square_index] * 1.5;
             },
             Some(Piece::Queen) => {
-                position_value += 100.0 + QUEEN_VALUES[square_index] * 2.0;
+                position_value += 100.0 + QUEEN_VALUES[square_index] * 1.5;
             },
             Some(Piece::King) => {
-                position_value += 1000.0 + KING_VALUES[square_index] * 2.0;
+                position_value += 1000.0 + KING_VALUES[square_index] * 1.5;
             },
             _ => ()
         }
@@ -101,22 +100,22 @@ fn calculate_position(board: &Board) -> f64 {
         let piece = board.piece_on(x);
         match piece {
             Some(Piece::Pawn) => {
-                position_value -= 10.0 + PAWN_VALUES[square_index] * 2.0;
+                position_value -= 10.0 + PAWN_VALUES[square_index] * 1.5;
             },
             Some(Piece::Knight) => {
-                position_value -= 35.0 + KNIGHT_VALUES[square_index] * 2.0;
+                position_value -= 35.0 + KNIGHT_VALUES[square_index] * 1.5;
             },
             Some(Piece::Bishop) => {
-                position_value -= 37.5 + BISHOP_VALUES[square_index] * 2.0;
+                position_value -= 37.5 + BISHOP_VALUES[square_index] * 1.5;
             },
             Some(Piece::Rook)  => {
-                position_value -= 52.5 + ROOK_VALUES[square_index] * 2.0;
+                position_value -= 52.5 + ROOK_VALUES[square_index] * 1.5;
             },
             Some(Piece::Queen) => {
-                position_value -= 100.0 + QUEEN_VALUES[square_index] * 2.0;
+                position_value -= 100.0 + QUEEN_VALUES[square_index] * 1.5;
             },
             Some(Piece::King) => {
-                position_value -= 1000.0 + KING_VALUES[square_index] * 2.0;
+                position_value -= 1000.0 + KING_VALUES[square_index] * 1.5;
             },
             _ => ()
         }
@@ -129,35 +128,21 @@ fn calculate_position(board: &Board) -> f64 {
 fn calculate_move(board: &Board, depth: u8, original_depth: u8, player: bool, optimizing_color: Color, mut alpha: f64, mut beta: f64) -> ReturnValue {
     let status = board.status();
     if depth == 0 || status != BoardStatus::Ongoing {
-        if optimizing_color == Color::White {
-            match status {
-                BoardStatus::Ongoing => return ReturnValue  { 
+        match status {
+            BoardStatus::Ongoing => return ReturnValue  { 
+                best_move: None,
+                position_evaluation: calculate_position(board)
+            },
+            BoardStatus::Checkmate => {
+                let eval = if optimizing_color == Color::White {999999.0} else {-999999.0};
+                return ReturnValue  { 
                     best_move: None,
-                    position_evaluation: calculate_position(board)
-                },
-                BoardStatus::Checkmate => return ReturnValue  { 
-                    best_move: None,
-                    position_evaluation: if player {999999.0} else {-999999.0}
-                },
-                BoardStatus::Stalemate => return ReturnValue {
-                    best_move: None,
-                    position_evaluation: 0.0
+                    position_evaluation: if player {eval} else {-eval}
                 }
-            }
-        } else {    
-            match status {
-                BoardStatus::Ongoing => return ReturnValue  { 
-                    best_move: None,
-                    position_evaluation: calculate_position(board)
-                },
-                BoardStatus::Checkmate => return ReturnValue  { 
-                    best_move: None,
-                    position_evaluation: if player {-999999.0} else {999999.0}
-                },
-                BoardStatus::Stalemate => return ReturnValue {
-                    best_move: None,
-                    position_evaluation: 0.0
-                }
+            },
+            BoardStatus::Stalemate => return ReturnValue {
+                best_move: None,
+                position_evaluation: 0.0
             }
         }
     }
@@ -177,7 +162,6 @@ fn calculate_move(board: &Board, depth: u8, original_depth: u8, player: bool, op
             
             value = f64::max(value, node_value.position_evaluation);    
 
-            alpha = f64::max(alpha, value);
 
             // Prune or not to prune
             if value >= beta {
@@ -189,9 +173,11 @@ fn calculate_move(board: &Board, depth: u8, original_depth: u8, player: bool, op
                 current_best_move = Some(legal_move);
             }
 
+            alpha = f64::max(alpha, value);
+
         }
         if depth == original_depth {
-            println!("Black: {}", best_value_move);
+            println!("White: {}", best_value_move);
         }
         return ReturnValue {
             best_move: current_best_move,
@@ -211,7 +197,6 @@ fn calculate_move(board: &Board, depth: u8, original_depth: u8, player: bool, op
             
             value = f64::min(value, node_value.position_evaluation);
             
-            beta = f64::min(beta, value);
 
             // Prune or not to prune
             if value <= alpha {
@@ -223,10 +208,11 @@ fn calculate_move(board: &Board, depth: u8, original_depth: u8, player: bool, op
                 current_best_move = Some(legal_move);
             }
 
+            beta = f64::min(beta, value);
 
         }
         if depth == original_depth {
-            println!("White: {}", best_value_move);
+            println!("Black: {}", best_value_move);
         }
         return ReturnValue {
             best_move: current_best_move,
@@ -238,6 +224,35 @@ fn calculate_move(board: &Board, depth: u8, original_depth: u8, player: bool, op
 fn generate_pgn(board: &Board, chess_move: &Option<ChessMove>, color: Color, current_pgn: &String, move_number: i32) -> String{
     match *chess_move {
         Some(i) => {
+
+                // Check white or black, create beginning
+            let beginning = match color {
+                Color::White => {
+                    let move_num = (move_number / 2) + 1 as i32;
+                    format!("{move_num}. ")
+                },
+                Color::Black => {format!(" ")}
+            };
+
+            // Check if castle
+            if i.get_source() == Square::E1 && i.get_dest() == Square::G1 && board.piece_on(Square::E1) == Some(Piece::King) {
+                let full_string = format!("{beginning}o-o");
+                let pgn = format!("{current_pgn}{full_string}");
+                return pgn;
+            } else if i.get_source() == Square::E8 && i.get_dest() == Square::G8 && board.piece_on(Square::E8) == Some(Piece::King) {
+                let full_string = format!("{beginning}o-o");
+                let pgn = format!("{current_pgn}{full_string}");
+                return pgn;
+            } else if i.get_source() == Square::E1 && i.get_dest() == Square::C1 && board.piece_on(Square::E1) == Some(Piece::King) {
+                let full_string = format!("{beginning}o-o-o");
+                let pgn = format!("{current_pgn}{full_string}");
+                return pgn;
+            } else if i.get_source() == Square::E8 && i.get_dest() == Square::C8 && board.piece_on(Square::E8) == Some(Piece::King) {
+                let full_string = format!("{beginning}o-o-o");
+                let pgn = format!("{current_pgn}{full_string}");
+                return pgn;
+            } 
+
             let destination = i.get_dest().to_string();
 
             // Get piece being moved
@@ -255,17 +270,6 @@ fn generate_pgn(board: &Board, chess_move: &Option<ChessMove>, color: Color, cur
                 None => "",
             };
 
-            // Check white or black, create beginning
-            let beginnging = match color {
-                Color::White => {
-                    let move_num = (move_number / 2) + 1 as i32;
-                    format!("{move_num}. ")
-                },
-                Color::Black => {
-                    format!(" ")
-                }
-            };
-
             let new_board = board.make_move_new(i);
 
             // Make move
@@ -278,7 +282,7 @@ fn generate_pgn(board: &Board, chess_move: &Option<ChessMove>, color: Color, cur
             if checkers.0 > 0 {
                 check = "+".to_owned();
             }
-            let full_string = format!("{beginnging}{piece_str}{capture}{destination}{check} ");
+            let full_string = format!("{beginning}{piece_str}{capture}{destination}{check} ");
 
             let pgn = format!("{current_pgn}{full_string}");
 
@@ -298,11 +302,10 @@ fn main() {
 
     let mut player = true;
     let mut optimizing_color = Color::White;
-    let initial_color = Color::White;
 
     let mut pgn = "".to_owned();
 
-    for x in 1..10 {
+    for x in 1..100 {
         let calculated_move = calculate_move(&board, 4, 4, player, optimizing_color, -999999.0, 999999.0);
 
         pgn = generate_pgn(&board, &calculated_move.best_move, optimizing_color, &pgn, x);
