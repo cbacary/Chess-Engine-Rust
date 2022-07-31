@@ -56,6 +56,7 @@ pub const INFINITY: f64 = f64::INFINITY;
 pub static mut count: i32 = 0;
 pub static mut pruned: i32 = 0;
 
+/// Generates a pgn 
 pub fn generate_pgn(board: &Board, chess_move: &Option<ChessMove>, color: Color, current_pgn: &String, move_number: i32) -> String{
     match *chess_move {
         Some(i) => {
@@ -71,19 +72,19 @@ pub fn generate_pgn(board: &Board, chess_move: &Option<ChessMove>, color: Color,
 
             // Check if castle
             if i.get_source() == Square::E1 && i.get_dest() == Square::G1 && board.piece_on(Square::E1) == Some(Piece::King) {
-                let full_string = format!("{beginning}O-O");
+                let full_string = format!("{beginning}O-O ");
                 let pgn = format!("{current_pgn}{full_string}");
                 return pgn;
             } else if i.get_source() == Square::E8 && i.get_dest() == Square::G8 && board.piece_on(Square::E8) == Some(Piece::King) {
-                let full_string = format!("{beginning}o-o");
+                let full_string = format!("{beginning}O-O ");
                 let pgn = format!("{current_pgn}{full_string}");
                 return pgn;
             } else if i.get_source() == Square::E1 && i.get_dest() == Square::C1 && board.piece_on(Square::E1) == Some(Piece::King) {
-                let full_string = format!("{beginning}O-O-O");
+                let full_string = format!("{beginning}O-O-O ");
                 let pgn = format!("{current_pgn}{full_string}");
                 return pgn;
             } else if i.get_source() == Square::E8 && i.get_dest() == Square::C8 && board.piece_on(Square::E8) == Some(Piece::King) {
-                let full_string = format!("{beginning}o-o-o");
+                let full_string = format!("{beginning}O-O-O ");
                 let pgn = format!("{current_pgn}{full_string}");
                 return pgn;
             } 
@@ -172,6 +173,12 @@ pub struct ReturnValue {
 
 pub fn get_flipped_board_index(square_index: usize) -> usize {
 
+    // Given an index on a 64 array board, converts it to a flipped version
+    // This is most likely slower than just creating new static positions for 
+    // the opposite color.
+    // Another option for this could be to create a static u8 array
+    // that stores each index's equivalent so it doesn't have to be solved in run-time
+
     let a = (square_index / 8) + 1;
     let b = 8 - a;
     let c = 8 * b;
@@ -245,13 +252,8 @@ pub fn calculate_position(board: &Board) -> f64 {
     return white_eval - black_eval;
 }
 
-// pub fn reorder_moves(legal_moves: MoveGen, taret_bitboard: BitBoard) -> MoveGen{
-//     let attack_moves = MoveGen::new(&legal_moves.get_move_list());
-//     attack_moves.set_iterator_mask(targets);
-    
-// }
 
-pub fn calc_move(board: &Board, depth: u8, color: i8, mut alpha: f64, mut beta: f64, debug: bool) -> ReturnValue {
+pub fn calc_move(board: &Board, depth: u8, max_iterative_deepening_depth: u8, color: i8, mut alpha: f64, mut beta: f64, debug: bool) -> ReturnValue {
     
     unsafe {count += 1;}
 
@@ -287,6 +289,8 @@ pub fn calc_move(board: &Board, depth: u8, color: i8, mut alpha: f64, mut beta: 
 
     let mut value = -INFINITY;
     let mut current_best_move: Option<ChessMove> = None;
+
+    // best_alpha and best_beta are solely here for the debug option
     let mut best_alpha = alpha;
     let mut best_beta = beta;
 
@@ -310,9 +314,18 @@ pub fn calc_move(board: &Board, depth: u8, color: i8, mut alpha: f64, mut beta: 
                 }   
             },
             Some(i) => {
+
+                // Implementation of negamax search w/ alpha-beta pruning
+
                 let new_board = board.make_move_new(i);
 
-                let child_node = calc_move(&new_board, depth - 1, -color, -beta, -alpha, false);
+                // This helps the AI to solve if a trade is actually worth it. 
+                // Rather than stopping a search half-way through the trade, we either 
+                // wait till the position reaches a point where there are no attack moves
+                // or we reach the max depth.
+                let depth_to_pass = if !attack_moves_completed && depth == 1 && max_iterative_deepening_depth > 1{1} else {depth - 1};
+
+                let child_node = calc_move(&new_board, depth_to_pass, max_iterative_deepening_depth - 1, -color, -beta, -alpha, false);
 
                 if -child_node.position_evaluation > value {
                     value = -child_node.position_evaluation;
@@ -331,29 +344,8 @@ pub fn calc_move(board: &Board, depth: u8, color: i8, mut alpha: f64, mut beta: 
             }
         }
     };
-    
-    // for legal_move in all_moves {
 
-    //     let new_board = board.make_move_new(legal_move);
-
-    //     let child_node = calc_move(&new_board, depth - 1, -color, -beta, -alpha, false);
-
-    //     if -child_node.position_evaluation > value {
-    //         value = -child_node.position_evaluation;
-    //         current_best_move = Some(legal_move);
-    //     }
-
-    //     if value > alpha {
-    //         alpha = value;
-    //         best_alpha = alpha;
-    //     }
-
-    //     if alpha >= beta {
-    //         unsafe {pruned += 1;}
-    //         break;
-    //     }
-    // }
-
+    // This allows you to get a peek into what the AI thinks was the best line
     if debug {
         let new_board = match current_best_move {
             Some(i) => {
@@ -367,7 +359,7 @@ pub fn calc_move(board: &Board, depth: u8, color: i8, mut alpha: f64, mut beta: 
                 Board::default()
             }
         };
-        let f = calc_move(&new_board, depth - 1, -color, -best_beta, -best_alpha, true);
+        let f = calc_move(&new_board, depth - 1, max_iterative_deepening_depth - 1, -color, -best_beta, -best_alpha, true);
     }
 
     return ReturnValue { 
