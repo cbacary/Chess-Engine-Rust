@@ -1,6 +1,6 @@
 use std::thread::current;
 
-use chess::{Board, Square, MoveGen, ChessMove, Color, Piece, BoardStatus, EMPTY, File, Game};
+use chess::{Board, Square, MoveGen, ChessMove, Color, Piece, EMPTY, File};
 
 static PAWN_VALUES: &'static [f64] =    &[0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
                                         5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,
@@ -51,7 +51,10 @@ static KING_VALUES: &'static [f64] =    &[-3.0, -4.0, -4.0, -5.0, -5.0, -4.0, -4
                                         2.0,  2.0,  0.0,  0.0,  0.0,  0.0,  2.0,  2.0,
                                         2.0,  3.0,  1.0,  0.0,  0.0,  1.0,  3.0,  2.0];
 
-const inf: f64 = f64::INFINITY;
+const INFINITY: f64 = f64::INFINITY;
+
+pub static mut count: i32 = 0;
+pub static mut pruned: i32 = 0;
 
 pub fn generate_pgn(board: &Board, chess_move: &Option<ChessMove>, color: Color, current_pgn: &String, move_number: i32) -> String{
     match *chess_move {
@@ -218,269 +221,17 @@ pub fn calculate_position(board: &Board) -> f64 {
     }
     return white_eval - black_eval;
 }
-
-pub fn breakdown_line(board: &Board, depth: u8, original_depth: u8, player: bool, optimizing_color: Color, mut alpha: f64, mut beta: f64) -> ReturnValue {
-    let status = board.status();
-    if depth == 0 || status != BoardStatus::Ongoing {
-        match status {
-            BoardStatus::Ongoing => {
-                let eval = match player {
-                    true =>  calculate_position(&board),
-                    false => calculate_position(&board)
-                };
-                // Optimizing for white
-                //  calculate_position -> white is positive and black is negative.
-                return ReturnValue  { 
-                    best_move: None,
-                    position_evaluation: eval
-                }
-            },
-            BoardStatus::Checkmate => {
-                // Optimizing for white
-                //  find mate when player is true (meaning white gets mated):
-                //      - return lowest possible number, since bad for white
-                //  find mate when player is false (meaning black gets mated by white):
-                //      - return highest possible number, since good for white
-                
-                // Optimizing for black
-                //  find mate when player is true (meaning white gets mated):
-                //      - return lowest possible number, since good for black
-                //  find mate when player is false (meaning black gets mated by white):
-                //      - return highest possible number, since bad for black
-                return ReturnValue  { 
-                    best_move: None,
-                    position_evaluation: if player {-999999.0} else {999999.0}
-                }
-            },
-            BoardStatus::Stalemate => return ReturnValue {
-                best_move: None,
-                position_evaluation: 0.0
-            }
-        }
-    }
-    let mut current_best_move = None;
-    let mut value;
-    let mut best_value_move = -1.0;
-
-    let mut attack_moves = MoveGen::new_legal(&board);
-    let targets = board.color_combined(!board.side_to_move());
-
-    attack_moves.set_iterator_mask(*targets);
-
-    let mut empty_moves = MoveGen::new_legal(&board);
-    empty_moves.set_iterator_mask(!EMPTY);
-
-    if player {
-        value = -999999.0;
-        best_value_move = value;
-        let mut best_alpha = -1.0;
-        let mut best_beta = -1.0;
-
-        for set in [attack_moves, empty_moves] {
-            for legal_move in set {
-
-                if current_best_move == None {
-                    current_best_move = Some(legal_move);
-                }
-
-                let new_board = board.make_move_new(legal_move);
-
-                // Calculate value of line
-                let node_value = calculate_move(&new_board, depth - 1, original_depth, false, optimizing_color, alpha, beta);
-                
-                value = f64::max(value, node_value.position_evaluation);
-
-                alpha = f64::max(alpha, value);
-                
-                if value > best_value_move {
-                    best_value_move = value;
-                    current_best_move = Some(legal_move);
-                    best_alpha = alpha;
-                    best_beta = beta;
-                }
-                
-                if alpha >= beta {
-                    break;
-                }
-            }
-        }
-        let new_board = match current_best_move {
-            Some(i) => {
-                println!("White -- Depth: {} -- Move: {}{} -- Value: {}", depth, i.get_source(), i.get_dest(), best_value_move); 
-                board.make_move_new(i)
-            }
-            _=> Board::default()
-        };
-        let f = breakdown_line(&new_board, depth - 1, original_depth, false, optimizing_color, best_alpha, best_beta);
-    } else {
-        value = 999999.0;
-        best_value_move = value;
-        let mut best_alpha = -1.0;
-        let mut best_beta = -1.0;
-
-        for set in [attack_moves, empty_moves] {
-            for legal_move in set {
-
-                if current_best_move == None {
-                    current_best_move = Some(legal_move);
-                }
-
-                let new_board = board.make_move_new(legal_move);
- 
-                // Calculate value of line
-                let node_value = calculate_move(&new_board, depth - 1, original_depth, true, optimizing_color, alpha, beta);
-
-                value = f64::min(value, node_value.position_evaluation);
-
-                beta = f64::min(beta, value);
-                
-                if value < best_value_move {
-                    best_value_move = value;
-                    current_best_move = Some(legal_move);
-                    best_alpha = alpha;
-                    best_beta = beta;
-                }
-
-                if alpha >= beta {
-                    break;
-                }
-           }
-        }
-        let new_board = match current_best_move {
-            Some(i) => {
-                println!("Black -- Depth: {} -- Move: {}{} -- Value: {}", depth, i.get_source(), i.get_dest(), best_value_move); 
-                board.make_move_new(i)
-            }
-            _=> Board::default()
-        };
-        let f = breakdown_line(&new_board, depth - 1, original_depth, true, optimizing_color, best_alpha, best_beta);
-    }
-    return ReturnValue {
-        best_move: current_best_move,
-        position_evaluation: value
-    }
-}
-
-pub fn calculate_move(board: &Board, depth: u8, original_depth: u8, player: bool, optimizing_color: Color, mut alpha: f64, mut beta: f64) -> ReturnValue {
-    let status = board.status();
-    if depth == 0 || status != BoardStatus::Ongoing {
-        match status {
-            BoardStatus::Ongoing => {
-                let eval = match player {
-                    true =>  calculate_position(&board),
-                    false => calculate_position(&board)
-                };
-                // Optimizing for white
-                //  calculate_position -> white is positive and black is negative.
-                return ReturnValue  { 
-                    best_move: None,
-                    position_evaluation: eval
-                }
-            },
-            BoardStatus::Checkmate => {
-                // Optimizing for white
-                //  find mate when player is true (meaning white gets mated):
-                //      - return lowest possible number, since bad for white
-                //  find mate when player is false (meaning black gets mated by white):
-                //      - return highest possible number, since good for white
-                
-                // Optimizing for black
-                //  find mate when player is true (meaning white gets mated):
-                //      - return lowest possible number, since good for black
-                //  find mate when player is false (meaning black gets mated by white):
-                //      - return highest possible number, since bad for black
-                return ReturnValue  { 
-                    best_move: None,
-                    position_evaluation: if player {-999999.0} else {999999.0}
-                }
-            },
-            BoardStatus::Stalemate => return ReturnValue {
-                best_move: None,
-                position_evaluation: 0.0
-            }
-        }
-    }
-    let mut current_best_move = None;
-    let mut value;
-
-    let mut attack_moves = MoveGen::new_legal(&board);
-    let targets = board.color_combined(!board.side_to_move());
-
-    attack_moves.set_iterator_mask(*targets);
-
-    let mut empty_moves = MoveGen::new_legal(&board);
-    empty_moves.set_iterator_mask(!EMPTY);
-
-    if player {
-        value = -999999.0;
-
-        for set in [attack_moves, empty_moves] {
-            for legal_move in set {
-
-                if current_best_move == None {
-                    current_best_move = Some(legal_move);
-                }
-
-                let new_board = board.make_move_new(legal_move);
-
-                // Calculate value of line
-                let node_value = calculate_move(&new_board, depth - 1, original_depth, false, optimizing_color, alpha, beta);
-
-                if node_value.position_evaluation > value {
-                    value = node_value.position_evaluation;
-                    current_best_move = Some(legal_move);
-                }
-
-                alpha = f64::max(alpha, value);
-
-                if alpha >= beta {
-                    break;
-                }
-            }
-        }
-    } else {
-        value = 999999.0;
-
-        for set in [attack_moves, empty_moves] {
-            for legal_move in set {
-
-                if current_best_move == None {
-                    current_best_move = Some(legal_move);
-                }
-
-                let new_board = board.make_move_new(legal_move);
- 
-                // Calculate value of line
-                let node_value = calculate_move(&new_board, depth - 1, original_depth, true, optimizing_color, alpha, beta);
-                
-                if node_value.position_evaluation < value {
-                    value = node_value.position_evaluation;
-                    current_best_move = Some(legal_move);
-                }
-
-                beta = f64::min(beta, value);
-
-                if alpha >= beta {
-                    break;
-                }
-           }
-        }
-        
-    }
-    return ReturnValue {
-        best_move: current_best_move,
-        position_evaluation: value
-    }
-}
-
-
-pub fn calc_move(board: &Board, depth: u8, original_depth: u8, color: Color, mut alpha: f64, mut beta: f64, debug: bool) -> ReturnValue {
     
-    // An implementation of board.status() inline, basically.
-    // Because board.status() uses the MoveGen::new_legal call anyway
-    let moves = MoveGen::   new_legal(&board);
+pub fn calc_move(board: &Board, depth: u8, original_depth: u8, color: i8, mut alpha: f64, mut beta: f64, debug: bool) -> ReturnValue {
+    
+    unsafe {count += 1;}
 
-    match moves.len() {
+    // An inline implementation of board.status() basically.
+    // Because board.status() uses the MoveGen::new_legal call anyway,
+    // There is no need to waste the time calling board.status()
+    let all_moves = MoveGen::new_legal(&board);
+
+    match all_moves.len() {
         0 => {
             if *board.checkers() == EMPTY {
                 return ReturnValue {
@@ -490,7 +241,7 @@ pub fn calc_move(board: &Board, depth: u8, original_depth: u8, color: Color, mut
             } else {
                 return ReturnValue {
                     best_move: None,
-                    position_evaluation: if color == Color::Black {inf} else {-inf}
+                    position_evaluation: f64::from(color) * INFINITY
                 }
             }
         },
@@ -500,92 +251,44 @@ pub fn calc_move(board: &Board, depth: u8, original_depth: u8, color: Color, mut
     if depth == 0 {
         return ReturnValue {
             best_move: None,
-            position_evaluation: -calculate_position(&board)
+            position_evaluation: f64::from(color) * calculate_position(&board)
         };
     }
+    
 
-    let mut value = if color == Color::White {inf} else {-inf}; 
+    let mut value = -INFINITY;
     let mut current_best_move: Option<ChessMove> = None;
     let mut best_alpha = alpha;
     let mut best_beta = beta;
-
-    for legal_move in moves {
+    
+    for legal_move in all_moves {
 
         let new_board = board.make_move_new(legal_move);
 
-        let child_node = calc_move(&new_board, depth - 1, original_depth, !color, alpha, beta, false);
+        let child_node = calc_move(&new_board, depth - 1, original_depth, -color, -beta, -alpha, false);
 
-        // let child_node_eval = match color {
-        //     Color::White => child_node.position_evaluation,
-        //     Color::Black => child_node.position_evaluation
-        // };
+        if -child_node.position_evaluation > value {
+            value = -child_node.position_evaluation;
+            current_best_move = Some(legal_move);
+        }
 
-        let child_node_eval = child_node.position_evaluation;
+        if value > alpha {
+            alpha = value;
+            best_alpha = alpha;
+        }
 
-        match color {
-            Color::White => {
-                if child_node_eval < value {
-                    current_best_move = Some(legal_move);
-                    value = child_node_eval;
-                    alpha = f64::max(alpha, value);
-                    best_alpha = alpha;
-                    // if alpha >= beta {
-                    //     break;
-                    // }
-                }          
-            },
-            Color::Black => {
-                if child_node_eval > value {
-                    current_best_move = Some(legal_move);
-                    value = child_node_eval;
-                    beta = f64::min(beta, value);
-                    best_beta = beta;
-                    // if alpha >= beta {
-                    //     break;
-                    // }
-                }
-          
-            }
-        };
-
-        // if child_node_eval > value {
-        //     current_best_move = Some(legal_move);
-        //     value = child_node_eval;
-        //     best_alpha = alpha;
-        //     best_beta = beta;
+        // if alpha >= beta {
+        //     unsafe {pruned += 1;}
+        //     break;
         // }
-
-        // match color {
-        //         Color::White => {
-
-        //             alpha = f64::max(alpha, child_node_eval);
-
-        //             if alpha >= beta {
-        //                 break;
-        //             }
-
-
-        //         },
-        //         Color::Black => {
-
-        //             beta = f64::min(beta, child_node_eval);
-                    
-        //             if beta >= alpha {
-        //                 break;
-        //             }
-
-        //         }
-        // };
     }
-
-
 
     if debug {
         let new_board = match current_best_move {
             Some(i) => {
-                println!("{} -- Depth: {} -- Move: {}{} -- Value: {}", 
-                    match color {Color::White => "White", Color::Black => "Black"},
-                    depth, i.get_source(), i.get_dest(), value); 
+                println!("{} -- Depth: {} -- Move: {}{} -- Value: {} -- Initial Value: {}", 
+                    match color {1 => "White", -1 => "Black", _ => "Uh-oh"},
+                    depth, i.get_source(), i.get_dest(), value, calculate_position(&board)); 
                 board.make_move_new(i)
             }
             _ => {
@@ -593,8 +296,11 @@ pub fn calc_move(board: &Board, depth: u8, original_depth: u8, color: Color, mut
                 Board::default()
             }
         };
-        let f = calc_move(&new_board, depth - 1, original_depth, !color, best_alpha, best_beta, true);
+        let f = calc_move(&new_board, depth - 1, original_depth, -color, -best_beta, -best_alpha, true);
     }
 
-    return ReturnValue { best_move: current_best_move, position_evaluation: value };
+    return ReturnValue { 
+        best_move: current_best_move, 
+        position_evaluation: value
+    };
 }
