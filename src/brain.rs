@@ -1,6 +1,6 @@
 use std::thread::current;
 
-use chess::{Board, Square, MoveGen, ChessMove, Color, Piece, EMPTY, File};
+use chess::{Board, Square, MoveGen, ChessMove, Color, Piece, EMPTY, File, Rank, BitBoard};
 
 static PAWN_VALUES: &'static [f64] =    &[0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
                                         5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,  5.0,
@@ -112,7 +112,21 @@ pub fn generate_pgn(board: &Board, chess_move: &Option<ChessMove>, color: Color,
                 _ => ""
             };
 
+            // Get rank
+            let rank = match i.get_source().get_rank() {
+                Rank::First => "1",
+                Rank::Second => "2",
+                Rank::Third => "3",
+                Rank::Fourth => "4",
+                Rank::Fifth => "5",
+                Rank::Sixth => "6",
+                Rank::Seventh => "7",
+                Rank::Eighth => "8",
+                _ => "Uh-ohh"
+            };
+
             let file = file.to_owned();
+            let rank = rank.to_owned();
 
             // Get piece being moved
             let piece_str = match board.piece_on(i.get_source()) {
@@ -138,7 +152,7 @@ pub fn generate_pgn(board: &Board, chess_move: &Option<ChessMove>, color: Color,
             if checkers.0 > 0 {
                 check = "+".to_owned();
             }
-            let full_string = format!("{beginning}{piece_str}{file}{capture}{destination}{promotion}{check} ");
+            let full_string = format!("{beginning}{piece_str}{file}{rank}{capture}{destination}{promotion}{check} ");
 
             let pgn = format!("{current_pgn}{full_string}");
 
@@ -231,6 +245,12 @@ pub fn calculate_position(board: &Board) -> f64 {
     return white_eval - black_eval;
 }
 
+// pub fn reorder_moves(legal_moves: MoveGen, taret_bitboard: BitBoard) -> MoveGen{
+//     let attack_moves = MoveGen::new(&legal_moves.get_move_list());
+//     attack_moves.set_iterator_mask(targets);
+    
+// }
+
 pub fn calc_move(board: &Board, depth: u8, color: i8, mut alpha: f64, mut beta: f64, debug: bool) -> ReturnValue {
     
     unsafe {count += 1;}
@@ -238,7 +258,7 @@ pub fn calc_move(board: &Board, depth: u8, color: i8, mut alpha: f64, mut beta: 
     // An inline implementation of board.status() basically.
     // Because board.status() uses the MoveGen::new_legal call anyway,
     // There is no need to waste the time calling board.status()
-    let all_moves = MoveGen::new_legal(&board);
+    let mut all_moves = MoveGen::new_legal(&board);
 
     match all_moves.len() {
         0 => {
@@ -250,7 +270,7 @@ pub fn calc_move(board: &Board, depth: u8, color: i8, mut alpha: f64, mut beta: 
             } else {
                 return ReturnValue {
                     best_move: None,
-                    position_evaluation: f64::from(color) * INFINITY
+                    position_evaluation: -INFINITY
                 }
             }
         },
@@ -269,28 +289,70 @@ pub fn calc_move(board: &Board, depth: u8, color: i8, mut alpha: f64, mut beta: 
     let mut current_best_move: Option<ChessMove> = None;
     let mut best_alpha = alpha;
     let mut best_beta = beta;
+
+    let mut attack_moves_completed = false;
+    let mut empty_moves_completed = false;
+
+    all_moves.set_iterator_mask(*board.color_combined(!board.side_to_move()));
     
-    for legal_move in all_moves {
+    loop {
+        match all_moves.next() {
+            None => {
+                // if we completed one iterator mask do the next 
+                // this is to improve alpha-beta pruning speed
+                // doing attack moves first increases chance of pruning
+                if attack_moves_completed == false {
+                    attack_moves_completed = true;
+                    all_moves.set_iterator_mask(!EMPTY);
+                } else if empty_moves_completed == false{
+                    empty_moves_completed = true;
+                    break;
+                }   
+            },
+            Some(i) => {
+                let new_board = board.make_move_new(i);
 
-        let new_board = board.make_move_new(legal_move);
+                let child_node = calc_move(&new_board, depth - 1, -color, -beta, -alpha, false);
 
-        let child_node = calc_move(&new_board, depth - 1, -color, -beta, -alpha, false);
+                if -child_node.position_evaluation > value {
+                    value = -child_node.position_evaluation;
+                    current_best_move = Some(i);
+                }
 
-        if -child_node.position_evaluation > value {
-            value = -child_node.position_evaluation;
-            current_best_move = Some(legal_move);
+                if value > alpha {
+                    alpha = value;
+                    best_alpha = alpha;
+                }
+
+                if alpha >= beta {
+                    unsafe {pruned += 1;}
+                    break;
+                }       
+            }
         }
+    };
+    
+    // for legal_move in all_moves {
 
-        if value > alpha {
-            alpha = value;
-            best_alpha = alpha;
-        }
+    //     let new_board = board.make_move_new(legal_move);
 
-        if alpha >= beta {
-            unsafe {pruned += 1;}
-            break;
-        }
-    }
+    //     let child_node = calc_move(&new_board, depth - 1, -color, -beta, -alpha, false);
+
+    //     if -child_node.position_evaluation > value {
+    //         value = -child_node.position_evaluation;
+    //         current_best_move = Some(legal_move);
+    //     }
+
+    //     if value > alpha {
+    //         alpha = value;
+    //         best_alpha = alpha;
+    //     }
+
+    //     if alpha >= beta {
+    //         unsafe {pruned += 1;}
+    //         break;
+    //     }
+    // }
 
     if debug {
         let new_board = match current_best_move {

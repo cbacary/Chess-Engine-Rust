@@ -6,7 +6,7 @@ use chess::{Board, MoveGen, Color, BoardStatus, ChessMove, Square, Game};
 
 fn run_tests() 
 {
-    let board = Board::from_str("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").expect("E");
+    let board = Board::from_str("r1k5/p4r1p/2np4/4p3/8/1PB1nP2/P1P1N2P/R1R3K1 b - - 0 24").expect("E");
     
     let test_pos_board = Board::from_str("4r2k/1rp2ppp/p7/8/1P6/P7/2R3PP/2KR4 b - - 0 40").expect("E");
 
