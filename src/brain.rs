@@ -51,7 +51,7 @@ static KING_VALUES: &'static [f64] =    &[-3.0, -4.0, -4.0, -5.0, -5.0, -4.0, -4
                                         2.0,  2.0,  0.0,  0.0,  0.0,  0.0,  2.0,  2.0,
                                         2.0,  3.0,  1.0,  0.0,  0.0,  1.0,  3.0,  2.0];
 
-const INFINITY: f64 = f64::INFINITY;
+pub const INFINITY: f64 = f64::INFINITY;
 
 pub static mut count: i32 = 0;
 pub static mut pruned: i32 = 0;
@@ -71,7 +71,7 @@ pub fn generate_pgn(board: &Board, chess_move: &Option<ChessMove>, color: Color,
 
             // Check if castle
             if i.get_source() == Square::E1 && i.get_dest() == Square::G1 && board.piece_on(Square::E1) == Some(Piece::King) {
-                let full_string = format!("{beginning}o-o");
+                let full_string = format!("{beginning}O-O");
                 let pgn = format!("{current_pgn}{full_string}");
                 return pgn;
             } else if i.get_source() == Square::E8 && i.get_dest() == Square::G8 && board.piece_on(Square::E8) == Some(Piece::King) {
@@ -79,7 +79,7 @@ pub fn generate_pgn(board: &Board, chess_move: &Option<ChessMove>, color: Color,
                 let pgn = format!("{current_pgn}{full_string}");
                 return pgn;
             } else if i.get_source() == Square::E1 && i.get_dest() == Square::C1 && board.piece_on(Square::E1) == Some(Piece::King) {
-                let full_string = format!("{beginning}o-o-o");
+                let full_string = format!("{beginning}O-O-O");
                 let pgn = format!("{current_pgn}{full_string}");
                 return pgn;
             } else if i.get_source() == Square::E8 && i.get_dest() == Square::C8 && board.piece_on(Square::E8) == Some(Piece::King) {
@@ -87,6 +87,15 @@ pub fn generate_pgn(board: &Board, chess_move: &Option<ChessMove>, color: Color,
                 let pgn = format!("{current_pgn}{full_string}");
                 return pgn;
             } 
+
+            // Check if pawn promotion
+            let mut promotion = "".to_owned();
+
+            let promote = i.get_promotion();
+            let promotion = match promote {
+                None => "".to_owned(),
+                Some(i) => format!("={i}")
+            };
 
             let destination = i.get_dest().to_string();
 
@@ -129,7 +138,7 @@ pub fn generate_pgn(board: &Board, chess_move: &Option<ChessMove>, color: Color,
             if checkers.0 > 0 {
                 check = "+".to_owned();
             }
-            let full_string = format!("{beginning}{piece_str}{file}{capture}{destination}{check} ");
+            let full_string = format!("{beginning}{piece_str}{file}{capture}{destination}{promotion}{check} ");
 
             let pgn = format!("{current_pgn}{full_string}");
 
@@ -221,8 +230,8 @@ pub fn calculate_position(board: &Board) -> f64 {
     }
     return white_eval - black_eval;
 }
-    
-pub fn calc_move(board: &Board, depth: u8, original_depth: u8, color: i8, mut alpha: f64, mut beta: f64, debug: bool) -> ReturnValue {
+
+pub fn calc_move(board: &Board, depth: u8, color: i8, mut alpha: f64, mut beta: f64, debug: bool) -> ReturnValue {
     
     unsafe {count += 1;}
 
@@ -265,7 +274,7 @@ pub fn calc_move(board: &Board, depth: u8, original_depth: u8, color: i8, mut al
 
         let new_board = board.make_move_new(legal_move);
 
-        let child_node = calc_move(&new_board, depth - 1, original_depth, -color, -beta, -alpha, false);
+        let child_node = calc_move(&new_board, depth - 1, -color, -beta, -alpha, false);
 
         if -child_node.position_evaluation > value {
             value = -child_node.position_evaluation;
@@ -277,10 +286,10 @@ pub fn calc_move(board: &Board, depth: u8, original_depth: u8, color: i8, mut al
             best_alpha = alpha;
         }
 
-        // if alpha >= beta {
-        //     unsafe {pruned += 1;}
-        //     break;
-        // }
+        if alpha >= beta {
+            unsafe {pruned += 1;}
+            break;
+        }
     }
 
     if debug {
@@ -296,7 +305,7 @@ pub fn calc_move(board: &Board, depth: u8, original_depth: u8, color: i8, mut al
                 Board::default()
             }
         };
-        let f = calc_move(&new_board, depth - 1, original_depth, -color, -best_beta, -best_alpha, true);
+        let f = calc_move(&new_board, depth - 1, -color, -best_beta, -best_alpha, true);
     }
 
     return ReturnValue { 
