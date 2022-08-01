@@ -252,8 +252,69 @@ pub fn calculate_position(board: &Board) -> f64 {
     return white_eval - black_eval;
 }
 
+pub fn find_move(board: &Board, depth: u8, max_iterative_deepening_depth: u8, color: i8, mut alpha: f64, beta: f64, debug: bool) -> Option<ChessMove> {
+    
+    let mut all_moves = MoveGen::new_legal(&board);
 
-pub fn calc_move(board: &Board, depth: u8, max_iterative_deepening_depth: u8, color: i8, mut alpha: f64, mut beta: f64, debug: bool) -> ReturnValue {
+    if all_moves.len() == 0 {
+        if *board.checkers() == EMPTY {
+            return None
+        } else {
+            return None
+        }
+    }
+
+    
+    let mut value = -INFINITY;
+    let mut current_best_move: Option<ChessMove> = None;
+
+    // best_alpha and best_beta are solely here for the debug option
+    // let mut best_alpha = alpha;
+    // let mut best_beta = beta;
+
+    let mut attack_moves_completed = false;
+    let mut empty_moves_completed = false;
+
+    all_moves.set_iterator_mask(*board.color_combined(!board.side_to_move()));
+    
+    loop {
+        match all_moves.next() {
+            None => {
+                if attack_moves_completed == false {
+                    attack_moves_completed = true;
+                    all_moves.set_iterator_mask(!EMPTY);
+                } else if empty_moves_completed == false{
+                    empty_moves_completed = true;
+                    break;
+                }   
+            },
+            Some(i) => {
+
+                let new_board = board.make_move_new(i);
+
+                let child_node = calc_move(&new_board, depth - 1, max_iterative_deepening_depth - 1, -color, -beta, -alpha, false);
+
+                if -child_node > value {
+                    value = -child_node;
+                    current_best_move = Some(i);
+                }
+
+                if value > alpha {
+                    alpha = value;
+                    // best_alpha = alpha;
+                }
+
+                if alpha >= beta {
+                    unsafe {pruned += 1;}
+                    break;
+                }       
+            }
+        }
+    };
+    return current_best_move;
+}
+
+pub fn calc_move(board: &Board, depth: u8, max_iterative_deepening_depth: u8, color: i8, mut alpha: f64, beta: f64, debug: bool) -> f64 {
     
     unsafe {count += 1;}
 
@@ -262,37 +323,25 @@ pub fn calc_move(board: &Board, depth: u8, max_iterative_deepening_depth: u8, co
     // There is no need to waste the time calling board.status()
     let mut all_moves = MoveGen::new_legal(&board);
 
-    match all_moves.len() {
-        0 => {
-            if *board.checkers() == EMPTY {
-                return ReturnValue {
-                    best_move: None,
-                    position_evaluation: 0.0          
-                }
-            } else {
-                return ReturnValue {
-                    best_move: None,
-                    position_evaluation: -INFINITY
-                }
-            }
-        },
-        _ => ()
-    };
+    if all_moves.len() == 0 {
+        if *board.checkers() == EMPTY {
+            return 0.0;         
+        } else {
+            return -INFINITY;
+        }
+    }
     
     if depth == 0 {
-        return ReturnValue {
-            best_move: None,
-            position_evaluation: f64::from(color) * calculate_position(&board)
-        };
+        return f64::from(color) * calculate_position(&board)
     }
     
 
     let mut value = -INFINITY;
-    let mut current_best_move: Option<ChessMove> = None;
+    // let mut current_best_move: Option<ChessMove> = None;
 
     // best_alpha and best_beta are solely here for the debug option
-    let mut best_alpha = alpha;
-    let mut best_beta = beta;
+    // let mut best_alpha = alpha;
+    // let mut best_beta = beta;
 
     let mut attack_moves_completed = false;
     let mut empty_moves_completed = false;
@@ -323,19 +372,22 @@ pub fn calc_move(board: &Board, depth: u8, max_iterative_deepening_depth: u8, co
                 // Rather than stopping a search half-way through the trade, we either 
                 // wait till the position reaches a point where there are no attack moves
                 // or we reach the max depth.
-                let depth_to_pass = if !attack_moves_completed && depth == 1 && max_iterative_deepening_depth > 1{1} else {depth - 1};
+                let depth_to_pass = if !attack_moves_completed && depth == 1 && max_iterative_deepening_depth > 1 {1} else {depth - 1};
 
                 let child_node = calc_move(&new_board, depth_to_pass, max_iterative_deepening_depth - 1, -color, -beta, -alpha, false);
 
-                if -child_node.position_evaluation > value {
-                    value = -child_node.position_evaluation;
-                    current_best_move = Some(i);
-                }
+                value = f64::max(value, -child_node);
+                alpha = f64::max(alpha, value);
 
-                if value > alpha {
-                    alpha = value;
-                    best_alpha = alpha;
-                }
+                // if -child_node > value {
+                //     value = -child_node;
+                    // current_best_move = Some(i);
+                // }
+
+                // if value > alpha {
+                //     alpha = value;
+                //     best_alpha = alpha;
+                // }
 
                 if alpha >= beta {
                     unsafe {pruned += 1;}
@@ -346,24 +398,20 @@ pub fn calc_move(board: &Board, depth: u8, max_iterative_deepening_depth: u8, co
     };
 
     // This allows you to get a peek into what the AI thinks was the best line
-    if debug {
-        let new_board = match current_best_move {
-            Some(i) => {
-                println!("{} -- Depth: {} -- Move: {}{} -- Value: {} -- Initial Value: {}", 
-                    match color {1 => "White", -1 => "Black", _ => "Uh-oh"},
-                    depth, i.get_source(), i.get_dest(), value, calculate_position(&board)); 
-                board.make_move_new(i)
-            }
-            _ => {
-                println!("error");
-                Board::default()
-            }
-        };
-        let f = calc_move(&new_board, depth - 1, max_iterative_deepening_depth - 1, -color, -best_beta, -best_alpha, true);
-    }
-
-    return ReturnValue { 
-        best_move: current_best_move, 
-        position_evaluation: value
-    };
+    // if debug {
+    //     let new_board = match current_best_move {
+    //         Some(i) => {
+    //             println!("{} -- Depth: {} -- Move: {}{} -- Value: {} -- Initial Value: {}", 
+    //                 match color {1 => "White", -1 => "Black", _ => "Uh-oh"},
+    //                 depth, i.get_source(), i.get_dest(), value, calculate_position(&board)); 
+    //             board.make_move_new(i)
+    //         }
+    //         _ => {
+    //             println!("error");
+    //             Board::default()
+    //         }
+    //     };
+    //     let f = calc_move(&new_board, depth - 1, max_iterative_deepening_depth - 1, -color, -best_beta, -best_alpha, true);
+    // }
+    value
 }

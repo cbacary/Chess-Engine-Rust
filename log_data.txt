@@ -1,0 +1,26 @@
+------------------------------------------------------------
+---------------2022-08-01 01:56:19.043972417 -04:00---------------
+{
+Depth: 4
+Max iterative depth: 6
+Average time per move (milli): 114
+Max game length: 200
+Actual game length: 89
+Initial fen: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+Final fen: 8/2p1Rpk1/7p/8/8/P6P/6PK/2r5 b - - 0 1
+Final PGN: 
+1. Nb1c3  Nb8c6 2. d2d4  d7d5 3. e2e3  e7e5 4. d4xe5  Bf8b4 5. Bf1b5  Ng8e7 6. Ng1e2  O-O 7. f2f4  Bc8f5 8. a2a3  Bb4a5 9. O-O  a7a6 10. Bb5xc6  b7xc6 11. Nc3a4  Bf5g4 12. Bc1d2  Bg4xe2 13. Qd1xe2  Ba5xd2 14. Qe2xd2  Ne7f5 15. Qd2d3  Qd8c8 16. Na4c5  a6a5 17. e3e4  Nf5e7 18. Qd3c3  d5xe4 19. Nc5xe4  Qc8e6 20. Ne4c5  Qe6f5 21. Qc3d3  Rf8d8 22. Qd3xf5  Ne7xf5 23. Ra1c1  a5a4 24. Rf1d1  Rd8d5 25. Nc5e4  Ra8b8 26. c2c4  Rd5d4 27. Rd1xd4  Nf5xd4 28. Ne4c3  Rb8xb2 29. Rc1d1  c6c5 30. Nc3xa4  Rb2c2 31. Na4xc5  Rc2xc4 32. h2h3  g7g5 33. f4xg5  Nd4e2+ 34. Kg1f2  Rc4xc5 35. Rd1d8+  Kg8g7 36. Kf2xe2  Rc5xe5+ 37. Ke2f1  Re5xg5 38. Rd8d7  Rg5c5 39. Kf1g1  Rc5c1+ 40. Kg1h2  h7h6 41. Rd7e7  Rc1c2 42. Kh2g1  Rc2c1+ 43. Kg1h2  Rc1c2 44. Kh2g1  Rc2c1+ 
+}
+------------------------------------------------------------
+---------------2022-08-01 01:59:10.244381402 -04:00---------------
+{
+Depth: 5
+Max iterative depth: 6
+Average time per move (milli): 579
+Max game length: 200
+Actual game length: 72
+Initial fen: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+Final fen: 1k6/1ppr3r/p6p/2bp1p2/5B2/4P3/P1P2PPP/3R2KR w - - 0 1
+Final PGN: 
+1. d2d4  d7d5 2. Nb1c3  Nb8c6 3. Ng1f3  Ng8f6 4. Bc1g5  Nf6e4 5. Qd1d3  Bc8f5 6. Qd3d1  Ne4xc3 7. b2xc3  Qd8d6 8. Qd1b1  O-O-O 9. Qb1b2  h7h6 10. Bg5h4  Kc8b8 11. Ra1b1  Bf5c8 12. e2e3  Qd6g6 13. Nf3e5  Nc6xe5 14. d4xe5  Qg6e4 15. Bh4g3  e7e6 16. Rh1g1  Qe4a4 17. Bf1b5  Qa4a3 18. Qb2xa3  Bf8xa3 19. c3c4  Ba3c5 20. c4xd5  e6xd5 21. Bb5d3  Bc8e6 22. Ke1f1  Rh8e8 23. Rg1h1  Bc5a3 24. Bd3b5  Be6d7 25. Bb5xd7  Rd8xd7 26. Kf1g1  Ba3c5 27. Rb1a1  f7f6 28. e5xf6  g7xf6 29. Bg3f4  Re8h8 30. Ra1d1  Rh8h7 31. Rd1d2  f6f5 32. Rd2d1  a7a6 33. Rd1d2  Bc5b6 34. Rd2d1  Bb6c5 35. Rd1d2  Bc5b6 36. Rd2d1 
+}
