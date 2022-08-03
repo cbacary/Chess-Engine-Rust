@@ -1,7 +1,8 @@
 mod positions;
 
-use chess::{BitBoard, Board, ChessMove, Color, File, MoveGen, Piece, Rank, Square, EMPTY};
-use positions::*;
+use chess::{Board, ChessMove, Color, File, MoveGen, Piece, Rank, Square, EMPTY};
+use std::mem;
+use positions::{get_flipped_board_index, get_piece_value};
 
 pub const INFINITY: f64 = f64::INFINITY;
 
@@ -51,7 +52,7 @@ pub fn generate_pgn(
             } else if i.get_source() == Square::E8
                 && i.get_dest() == Square::C8
                 && board.piece_on(Square::E8) == Some(Piece::King)
-            {
+{
                 let full_string = format!("{beginning}O-O-O ");
                 let pgn = format!("{current_pgn}{full_string}");
                 return pgn;
@@ -78,7 +79,6 @@ pub fn generate_pgn(
                 File::F => "f",
                 File::G => "g",
                 File::H => "h",
-                _ => "",
             };
 
             // Get rank
@@ -118,10 +118,8 @@ pub fn generate_pgn(
             if checkers.0 > 0 {
                 check = "+".to_owned();
             }
-            let full_string = 
-format!(
-"{beginning}{piece_str}{file}{rank}{capture}{destination}{promotion}{check}"
-            );
+            let full_string = format!(
+"{beginning}{piece_str}{file}{rank}{capture}{destination}{promotion}{check} ");
 
             let pgn = format!("{current_pgn}{full_string}");
 
@@ -134,30 +132,24 @@ format!(
     }
 }
 
-#[derive(Debug)]
-pub struct ReturnValue {
-    pub best_move: Option<ChessMove>,
-    pub position_evaluation: f64,
-}
+//pub fn get_flipped_board_index(square_index: usize) -> usize {
+    //// Given an index on a 64 array board, converts it to a flipped version
+    //// This is most likely slower than just creating new static positions for
+    //// the opposite color.
+    //// Another option for this could be to create a static u8 array
+    //// that stores each index's equivalent so it doesn't have to be solved in run-time
 
-pub fn get_flipped_board_index(square_index: usize) -> usize {
-    // Given an index on a 64 array board, converts it to a flipped version
-    // This is most likely slower than just creating new static positions for
-    // the opposite color.
-    // Another option for this could be to create a static u8 array
-    // that stores each index's equivalent so it doesn't have to be solved in run-time
+    //let a = (square_index / 8) + 1;
+    //let b = 8 - a;
+    //let c = 8 * b;
+    //let d = square_index % 8;
 
-    let a = (square_index / 8) + 1;
-    let b = 8 - a;
-    let c = 8 * b;
-    let d = square_index % 8;
-
-    return c + d;
-}
+    //return c + d;
+//}
 
 #[inline]
 pub fn calculate_position(board: &Board) -> f64 {
-    // returns the numerical value of the positiong
+    // returns the numerical value of the position
 
     let mut white_eval = 0.0;
     let mut black_eval = 0.0;
@@ -167,60 +159,17 @@ pub fn calculate_position(board: &Board) -> f64 {
 
     for x in *white_pieces {
         let square_index = get_flipped_board_index(x.to_int() as usize);
-        let piece = board.piece_on(x);
-        match piece {
-            Some(Piece::Pawn) => {
-                white_eval += 10.0 + PAWN_VALUES[square_index]/* * 2.0 */;
-            }
-            Some(Piece::Knight) => {
-                white_eval += 35.0 + KNIGHT_VALUES[square_index]/* * 2.0 */;
-            }
-            Some(Piece::Bishop) => {
-                white_eval += 35.0 + BISHOP_VALUES[square_index]/* * 2.0 */;
-            }
-            Some(Piece::Rook) => {
-                white_eval += 52.5 + ROOK_VALUES[square_index]/* * 2.0 */;
-            }
-            Some(Piece::Queen) => {
-                white_eval += 100.0 + QUEEN_VALUES[square_index]/* * 2.0 */;
-            }
-            Some(Piece::King) => {
-                white_eval += 1000.0 + KING_VALUES[square_index]/* * 2.0 */;
-            }
-            _ => (),
-        }
+        white_eval += get_piece_value(board.piece_on(x).unwrap(), square_index);
     }
 
     for x in *black_pieces {
         let square_index = x.to_int() as usize;
-
-        let piece = board.piece_on(x);
-        match piece {
-            Some(Piece::Pawn) => {
-                black_eval += 10.0 + PAWN_VALUES[square_index]/* * 2.0 */;
-            }
-            Some(Piece::Knight) => {
-                black_eval += 35.0 + KNIGHT_VALUES[square_index]/* * 2.0 */;
-            }
-            Some(Piece::Bishop) => {
-                black_eval += 35.0 + BISHOP_VALUES[square_index]/* * 2.0 */;
-            }
-            Some(Piece::Rook) => {
-                black_eval += 52.5 + ROOK_VALUES[square_index]/* * 2.0 */;
-            }
-            Some(Piece::Queen) => {
-                black_eval += 100.0 + QUEEN_VALUES[square_index]/* * 2.0 */;
-            }
-            Some(Piece::King) => {
-                black_eval += 1000.0 + KING_VALUES[square_index]/* * 2.0 */;
-            }
-            _ => (),
-        }
+        black_eval += get_piece_value(board.piece_on(x).unwrap(), square_index);
     }
+
     return white_eval - black_eval;
 }
 
-#[inline]
 pub fn find_move(
     board: &Board,
     depth: u8,
@@ -228,24 +177,11 @@ pub fn find_move(
     color: i8,
     mut alpha: f64,
     beta: f64,
-    debug: bool,
 ) -> Option<ChessMove> {
+ 
     let mut all_moves = MoveGen::new_legal(&board);
-
-    if all_moves.len() == 0 {
-        if *board.checkers() == EMPTY {
-            return None;
-        } else {
-            return None;
-        }
-    }
-
     let mut value = -INFINITY;
     let mut current_best_move: Option<ChessMove> = None;
-
-    // best_alpha and best_beta are solely here for the debug option
-    // let mut best_alpha = alpha;
-    // let mut best_beta = beta;
 
     let mut attack_moves_completed = false;
     let mut empty_moves_completed = false;
@@ -264,27 +200,26 @@ pub fn find_move(
                 }
             }
             Some(i) => {
+
+                let mut new_board = mem::MaybeUninit::<Board>::uninit();
+
                 let new_board = board.make_move_new(i);
 
-                let child_node = calc_move(
+                let child_node = -calc_move(
                     &new_board,
                     depth - 1,
                     max_iterative_deepening_depth - 1,
-                    -color,
-                    -beta,
-                    -alpha,
-                    false,
+                    -color, 
+                    -beta, 
+                    -alpha
                 );
 
-                if -child_node > value {
-                    value = -child_node;
+                if child_node > value {
+                    value = child_node;
                     current_best_move = Some(i);
                 }
 
-                if value > alpha {
-                    alpha = value;
-                    // best_alpha = alpha;
-                }
+                alpha = f64::max(alpha, value);
 
                 if alpha >= beta {
                     break;
@@ -295,7 +230,6 @@ pub fn find_move(
     return current_best_move;
 }
 
-#[inline]
 pub fn calc_move(
     board: &Board,
     depth: u8,
@@ -303,19 +237,21 @@ pub fn calc_move(
     color: i8,
     mut alpha: f64,
     beta: f64,
-    debug: bool,
 ) -> f64 {
     // An inline implementation of board.status() basically.
     // Because board.status() uses the MoveGen::new_legal call anyway,
     // There is no need to waste the time calling board.status()
     let mut all_moves = MoveGen::new_legal(&board);
 
-    if all_moves.len() == 0 {
-        if *board.checkers() == EMPTY {
-            return 0.0;
-        } else {
-            return -INFINITY;
+    match all_moves.len() {
+        0 => {
+            if *board.checkers() == EMPTY {
+                return 0.0;
+            } else {
+                return -INFINITY;
+            }
         }
+        _ => ()
     }
 
     if depth == 0 {
@@ -326,8 +262,6 @@ pub fn calc_move(
     // let mut current_best_move: Option<ChessMove> = None;
 
     // best_alpha and best_beta are solely here for the debug option
-    // let mut best_alpha = alpha;
-    // let mut best_beta = beta;
 
     let mut attack_moves_completed = false;
     let mut empty_moves_completed = false;
@@ -352,44 +286,27 @@ pub fn calc_move(
                 // Implementation of negamax search w/ alpha-beta pruning
 
                 let new_board = board.make_move_new(i);
+                
+                let depth_to_pass = if !attack_moves_completed && depth == 1 && max_iterative_deepening_depth > 1 {1} else {depth - 1};
+
+                value = f64::max(value, -calc_move(&new_board, depth_to_pass, max_iterative_deepening_depth - 1, -color, -beta, -alpha));
+                alpha = f64::max(alpha, value);
+
+                if alpha >= beta {
+                    break;
+                }
 
                 // This helps the AI to solve if a trade is actually worth it.
                 // Rather than stopping a search half-way through the trade, we either
                 // wait till the position reaches a point where there are no attack moves
                 // or we reach the max depth.
-                let depth_to_pass =
-                    if !attack_moves_completed && depth == 1 && max_iterative_deepening_depth > 1 {
-                        1
-                    } else {
-                        depth - 1
-                    };
+                //let depth_to_pass =
+                    //if !attack_moves_completed && depth == 1 && max_iterative_deepening_depth > 1 {
+                        //1
+                    //} else {
+                        //depth - 1
+                    //};
 
-                let child_node = calc_move(
-                    &new_board,
-                    depth_to_pass,
-                    max_iterative_deepening_depth - 1,
-                    -color,
-                    -beta,
-                    -alpha,
-                    false,
-                );
-
-                value = f64::max(value, -child_node);
-                alpha = f64::max(alpha, value);
-
-                // if -child_node > value {
-                //     value = -child_node;
-                // current_best_move = Some(i);
-                // }
-
-                // if value > alpha {
-                //     alpha = value;
-                //     best_alpha = alpha;
-                // }
-
-                if alpha >= beta {
-                    break;
-                }
             }
         }
     }

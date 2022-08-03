@@ -1,4 +1,4 @@
-use chess::{Board, Color, MoveGen};
+use chess::{Board, MoveGen};
 use std::time::Instant;
 
 static mut C: i64 = 0;
