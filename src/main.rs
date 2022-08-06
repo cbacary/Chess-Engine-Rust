@@ -1,66 +1,58 @@
 mod brain;
 mod tests;
+mod zob_return;
+mod pgn;
 
-use std::str::FromStr;
-use brain::{calculate_position, generate_pgn, find_move, INFINITY};
-use chess::{Board, MoveGen, Color, BoardStatus, ChessMove, Square, Game};
+use pgn::{generate_pgn, create_board_from_pgn};
+use brain::{find_move, INFINITY, searched};
+use zob_return::ZobristReturn;
+use chess::{Board, MoveGen, Color, ChessMove, Square, Game};
 use std::io;
 use std::time::Instant;
-use std::fs::{File, OpenOptions};
+use std::fs::{OpenOptions};
 use std::io::Write;
 use chrono::offset;
+use std::collections::{VecDeque, HashMap};
+use fasthash::{RandomState, xx};
 
 struct LogData {
     depth: u8,
     max_iterative_deepening_depth: u8,
     average_time_per_move: u128,
     max_game_length: i32,
-    final_game_length: i32,
+    final_game_length: u128,
     initial_fen: String,
     final_fen: String,
     final_pgn: String,
 
 }
 
-fn create_board_from_pgn(pgn: String) -> Board{
-    let mut board = Board::default();
-    let moves = pgn.split_whitespace();
-    let mut index = 0;
-    for i in moves {
-        if index % 3 == 0 {index += 1; continue;}
-        let m = ChessMove::from_san(&board, i).expect("e");
-        board = board.make_move_new(m);
-        index += 1;
-    }
-    return board;
-}
+// fn run_game_loop() {
+//     loop {
+//         let mut pgn = String::new();
+//         println!("pgn: ");
+//         io::stdin().read_line(&mut pgn).expect("Failed to read line");
 
-fn run_game_loop() {
-    loop {
-        let mut pgn = String::new();
-        println!("pgn: ");
-        io::stdin().read_line(&mut pgn).expect("Failed to read line");
+//         let board = create_board_from_pgn(pgn);
 
-        let board = create_board_from_pgn(pgn);
+//         let color = board.side_to_move();
 
-        let color = board.side_to_move();
+//         let mut color = if color == Color::White {1} else {-1};
+//         let depth = 4;
+//         let alpha = -INFINITY;
+//         let beta = INFINITY;
+//         let max_iterative_deepening_depth = 6;
 
-        let mut color = if color == Color::White {1} else {-1};
-        let depth = 4;
-        let alpha = -INFINITY;
-        let beta = INFINITY;
-        let max_iterative_deepening_depth = 4;
+//         let calculated_move = find_move(&board, depth, max_iterative_deepening_depth, color, alpha, beta);
 
-        let calculated_move = find_move(&board, depth, max_iterative_deepening_depth, color, alpha, beta);
-
-        match calculated_move {
-            Some(i) => {
-                println!("{}{}", i.get_source(), i.get_dest());
-            },
-            _ => ()
-        };
-    }
-}
+//         match calculated_move {
+//             Some(i) => {
+//                 println!("{}{}", i.get_source(), i.get_dest());
+//             },
+//             _ => ()
+//         };
+//     }
+// }
 
 fn write_log_data(data: LogData) {
     let mut file = OpenOptions::new()
@@ -101,13 +93,36 @@ Final PGN: \n{final_pgn}
 fn main() {
 
 
+    //run_game_loop();
+
+    // I calculated the average moves searched at a depth of 4 with 
+    // "iterative deepening," or whatever I should be calling cause it 
+    // isn't actually iterative deepenign, and I got a something like 64,000
+    // I figured that doing around double the size of that should be okay
+    // for a transposition table. 2^17 is the closest base 2 that is double of 64k
+    let base: u64 = 2;
+    let pow: u32 = 14;
+
+    let capacity = base.pow(pow) as usize;
+
+    let s = RandomState::<xx::Hash64>::new(); 
+    
+    // Zobrist table stores all the zobrist values as keys    
+    let mut zobrist_table: HashMap<u64, ZobristReturn, RandomState<xx::Hash64>> = HashMap::with_hasher(s);
+
+    // This queue will contain all the same zobrists keys stored in 
+    // zobrist_table but when this table fills up and we pop_back from this table
+    // we will pass the popped value into zobrist_table.remove(popped_value).
+    // This avoids indexing zobrists keys.
+    let mut scheduled_removal: VecDeque<u64> = VecDeque::with_capacity(capacity);
+
     let mut game = Game::new();
 
     let board = game.current_position();
 
     let instant = Instant::now();
 
-    let f = MoveGen::movegen_perft_test(&board, 5);
+    let _f = MoveGen::movegen_perft_test(&board, 5);
 
     let e = instant.elapsed();
 
@@ -118,10 +133,10 @@ fn main() {
     let color = board.side_to_move();
 
     let mut color = if color == Color::White {1} else {-1};
-    let mut depth = 4;
+    let depth = 5;
     let alpha = -INFINITY;
     let beta = INFINITY;
-    let mut max_iterative_deepening_depth = 6;
+    let max_iterative_deepening_depth = 6;
     let max_game_length = 200;
 
     let mut pgn = "".to_owned();
@@ -133,13 +148,18 @@ fn main() {
 
     for i in 0..max_game_length {
 
-        if game.can_declare_draw() || !game.result().is_none() {c = i; break;}
+        if game.can_declare_draw() || !game.result().is_none() {break;}
 
         let board = game.current_position();
 
         let now = Instant::now();
 
-        let calculated_move = find_move(&board, depth, max_iterative_deepening_depth, color, alpha, beta, );
+        let calculated_move = find_move(&board, depth, 
+            max_iterative_deepening_depth, color, alpha, beta, 
+            &mut zobrist_table, &mut scheduled_removal, capacity);
+
+
+        println!("Table: {} -- Removal: {}", zobrist_table.len(), scheduled_removal.len());
 
         total_time_milli += now.elapsed().as_millis();
 
@@ -158,8 +178,13 @@ fn main() {
         color = -color;
         c += 1;
     }
+    
 
-    let average_time_mili = total_time_milli / 200;
+    let average_time_mili = total_time_milli / c;
+    unsafe {
+        let average_searched = searched / c;
+        println!("Average nodes searched per depth: {}", average_searched);
+    }
     println!("Total time (milli): {} -- Average time per move (milli): {}", total_time_milli, average_time_mili);
     let board = game.current_position();
     let final_fen = format!("{board}");

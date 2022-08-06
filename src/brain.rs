@@ -1,151 +1,15 @@
 mod positions;
 
-use chess::{Board, ChessMove, Color, File, MoveGen, Piece, Rank, Square, EMPTY};
-use std::mem;
+use std::collections::{VecDeque, HashMap};
+use crate::zob_return::{ZobristReturn, Flag};
+use chess::{Board, ChessMove, Color, File, MoveGen, Piece, Rank, Square, EMPTY,};
 use positions::{get_flipped_board_index, get_piece_value};
+use fasthash::{RandomState, xx};
 
 pub const INFINITY: f64 = f64::INFINITY;
+pub static mut searched: u128 = 0;
 
-/// Generates a pgn
-pub fn generate_pgn(
-    board: &Board,
-    chess_move: &Option<ChessMove>,
-    color: Color,
-    current_pgn: &String,
-    move_number: i32,
-) -> String {
-    match *chess_move {
-        Some(i) => {
-            // Check white or black, create beginning
-            let beginning = match color {
-                Color::White => {
-                    let move_num = (move_number / 2) + 1 as i32;
-                    format!("{move_num}. ")
-                }
-                Color::Black => {
-                    format!(" ")
-                }
-            };
 
-            // Check if castle
-            if i.get_source() == Square::E1
-                && i.get_dest() == Square::G1
-                && board.piece_on(Square::E1) == Some(Piece::King)
-            {
-                let full_string = format!("{beginning}O-O ");
-                let pgn = format!("{current_pgn}{full_string}");
-                return pgn;
-            } else if i.get_source() == Square::E8
-                && i.get_dest() == Square::G8
-                && board.piece_on(Square::E8) == Some(Piece::King)
-            {
-                let full_string = format!("{beginning}O-O ");
-                let pgn = format!("{current_pgn}{full_string}");
-                return pgn;
-            } else if i.get_source() == Square::E1
-                && i.get_dest() == Square::C1
-                && board.piece_on(Square::E1) == Some(Piece::King)
-            {
-                let full_string = format!("{beginning}O-O-O ");
-                let pgn = format!("{current_pgn}{full_string}");
-                return pgn;
-            } else if i.get_source() == Square::E8
-                && i.get_dest() == Square::C8
-                && board.piece_on(Square::E8) == Some(Piece::King)
-{
-                let full_string = format!("{beginning}O-O-O ");
-                let pgn = format!("{current_pgn}{full_string}");
-                return pgn;
-            }
-
-            // Check if pawn promotion
-            let mut promotion = "".to_owned();
-
-            let promote = i.get_promotion();
-            let promotion = match promote {
-                None => "".to_owned(),
-                Some(i) => format!("={i}"),
-            };
-
-            let destination = i.get_dest().to_string();
-
-            // Get file
-            let file = match i.get_source().get_file() {
-                File::A => "a",
-                File::B => "b",
-                File::C => "c",
-                File::D => "d",
-                File::E => "e",
-                File::F => "f",
-                File::G => "g",
-                File::H => "h",
-            };
-
-            // Get rank
-            let rank = match i.get_source().get_rank() {
-                Rank::First => "1",
-                Rank::Second => "2",
-                Rank::Third => "3",
-                Rank::Fourth => "4",
-                Rank::Fifth => "5",
-                Rank::Sixth => "6",
-                Rank::Seventh => "7",
-                Rank::Eighth => "8",
-            };
-
-            let file = file.to_owned();
-            let rank = rank.to_owned();
-
-            // Get piece being moved
-            let piece_str = match board.piece_on(i.get_source()) {
-                Some(Piece::Pawn) => "".to_owned(),
-                Some(i) => format!("{i}").to_uppercase(),
-                _ => "".to_owned(),
-            };
-
-            // Check if a capture
-            let capture = match board.piece_on(i.get_dest()) {
-                Some(i) => "x",
-                None => "",
-            };
-
-            // Make move
-            let new_board = board.make_move_new(i);
-
-            // Check if a check
-            let checkers = new_board.checkers();
-            let mut check = "".to_owned();
-            if checkers.0 > 0 {
-                check = "+".to_owned();
-            }
-            let full_string = format!(
-"{beginning}{piece_str}{file}{rank}{capture}{destination}{promotion}{check} ");
-
-            let pgn = format!("{current_pgn}{full_string}");
-
-            return pgn;
-        }
-        None => {
-            println!("error");
-            return String::from("");
-        }
-    }
-}
-
-//pub fn get_flipped_board_index(square_index: usize) -> usize {
-    //// Given an index on a 64 array board, converts it to a flipped version
-    //// This is most likely slower than just creating new static positions for
-    //// the opposite color.
-    //// Another option for this could be to create a static u8 array
-    //// that stores each index's equivalent so it doesn't have to be solved in run-time
-
-    //let a = (square_index / 8) + 1;
-    //let b = 8 - a;
-    //let c = 8 * b;
-    //let d = square_index % 8;
-
-    //return c + d;
-//}
 
 #[inline]
 pub fn calculate_position(board: &Board) -> f64 {
@@ -170,6 +34,7 @@ pub fn calculate_position(board: &Board) -> f64 {
     return white_eval - black_eval;
 }
 
+#[inline]
 pub fn find_move(
     board: &Board,
     depth: u8,
@@ -177,14 +42,20 @@ pub fn find_move(
     color: i8,
     mut alpha: f64,
     beta: f64,
+    zobrist_table: &mut HashMap<u64, ZobristReturn, RandomState<xx::Hash64>>,
+    scheduled_removal: &mut VecDeque<u64>,
+    capacity: usize,
 ) -> Option<ChessMove> {
  
+    unsafe {searched += 1;};
+
     let mut all_moves = MoveGen::new_legal(&board);
     let mut value = -INFINITY;
     let mut current_best_move: Option<ChessMove> = None;
 
+    let hash = board.get_hash();
+
     let mut attack_moves_completed = false;
-    let mut empty_moves_completed = false;
 
     all_moves.set_iterator_mask(*board.color_combined(!board.side_to_move()));
 
@@ -194,16 +65,15 @@ pub fn find_move(
                 if attack_moves_completed == false {
                     attack_moves_completed = true;
                     all_moves.set_iterator_mask(!EMPTY);
-                } else if empty_moves_completed == false {
-                    empty_moves_completed = true;
+                } else {
                     break;
                 }
             }
             Some(i) => {
 
-                let mut new_board = mem::MaybeUninit::<Board>::uninit();
 
                 let new_board = board.make_move_new(i);
+
 
                 let child_node = -calc_move(
                     &new_board,
@@ -211,8 +81,22 @@ pub fn find_move(
                     max_iterative_deepening_depth - 1,
                     -color, 
                     -beta, 
-                    -alpha
+                    -alpha,
+                    zobrist_table,
+                    scheduled_removal,
+                    capacity
                 );
+
+                let zob_ret = ZobristReturn {
+                    value: value,
+                    depth: depth,
+                    flag: Flag::Exact
+                };
+            
+                zobrist_table.insert(hash, zob_ret);
+                scheduled_removal.push_back(hash);
+            
+            
 
                 if child_node > value {
                     value = child_node;
@@ -227,6 +111,7 @@ pub fn find_move(
             }
         }
     }
+
     return current_best_move;
 }
 
@@ -236,13 +121,20 @@ pub fn calc_move(
     max_iterative_deepening_depth: u8,
     color: i8,
     mut alpha: f64,
-    beta: f64,
+    mut beta: f64,
+    zobrist_table: &mut HashMap<u64, ZobristReturn, RandomState<xx::Hash64>>,
+    scheduled_removal: &mut VecDeque<u64>,
+    capacity: usize,
 ) -> f64 {
+
+    let alpha_original = alpha;
+
+
     // An inline implementation of board.status() basically.
     // Because board.status() uses the MoveGen::new_legal call anyway,
     // There is no need to waste the time calling board.status()
     let mut all_moves = MoveGen::new_legal(&board);
-
+    unsafe {searched += 1};
     match all_moves.len() {
         0 => {
             if *board.checkers() == EMPTY {
@@ -253,9 +145,28 @@ pub fn calc_move(
         }
         _ => ()
     }
-
     if depth == 0 {
         return f64::from(color) * calculate_position(&board);
+    } 
+    
+    let hash = board.get_hash();
+
+    if let Some(zob_val) = zobrist_table.get(&hash) {
+        if zob_val.depth >= depth {
+            //if zob_val.flag == Flag::Exact {
+            if zob_val.depth  % 2 != depth % 2 {
+                return -zob_val.value;
+            }
+            return zob_val.value;
+            //} else if zob_val.flag == Flag::Upperbound {
+                //alpha = f64::max(zob_val.value, alpha);
+            //} else {
+                //beta = f64::min(beta, zob_val.value);
+            //}
+            //if alpha >= beta {
+                //return zob_val.value;
+            //}
+        }
     }
 
     let mut value = -INFINITY;
@@ -278,7 +189,6 @@ pub fn calc_move(
                     attack_moves_completed = true;
                     all_moves.set_iterator_mask(!EMPTY);
                 } else if empty_moves_completed == false {
-                    empty_moves_completed = true;
                     break;
                 }
             }
@@ -286,46 +196,58 @@ pub fn calc_move(
                 // Implementation of negamax search w/ alpha-beta pruning
 
                 let new_board = board.make_move_new(i);
-                
-                let depth_to_pass = if !attack_moves_completed && depth == 1 && max_iterative_deepening_depth > 1 {1} else {depth - 1};
 
-                value = f64::max(value, -calc_move(&new_board, depth_to_pass, max_iterative_deepening_depth - 1, -color, -beta, -alpha));
+                let depth_to_pass = if !attack_moves_completed && depth == 1 && 
+                    max_iterative_deepening_depth > 1 {
+                        1
+                    } else {
+                        depth - 1
+                    };
+
+                let child_node = -calc_move(
+                        &new_board, depth_to_pass, 
+                        max_iterative_deepening_depth - 1,
+                        -color, -beta, -alpha,
+                        zobrist_table, scheduled_removal, capacity
+                );
+
+                value = f64::max(value, child_node);
+
                 alpha = f64::max(alpha, value);
-
+                
                 if alpha >= beta {
                     break;
                 }
-
-                // This helps the AI to solve if a trade is actually worth it.
-                // Rather than stopping a search half-way through the trade, we either
-                // wait till the position reaches a point where there are no attack moves
-                // or we reach the max depth.
-                //let depth_to_pass =
-                    //if !attack_moves_completed && depth == 1 && max_iterative_deepening_depth > 1 {
-                        //1
-                    //} else {
-                        //depth - 1
-                    //};
-
             }
         }
     }
 
-    // This allows you to get a peek into what the AI thinks was the best line
-    // if debug {
-    //     let new_board = match current_best_move {
-    //         Some(i) => {
-    //             println!("{} -- Depth: {} -- Move: {}{} -- Value: {} -- Initial Value: {}",
-    //                 match color {1 => "White", -1 => "Black", _ => "Uh-oh"},
-    //                 depth, i.get_source(), i.get_dest(), value, calculate_position(&board));
-    //             board.make_move_new(i)
-    //         }
-    //         _ => {
-    //             println!("error");
-    //             Board::default()
-    //         }
-    //     };
-    //     let f = calc_move(&new_board, depth - 1, max_iterative_deepening_depth - 1, -color, -best_beta, -best_alpha, true);
-    // }
+    let flag = Flag::Exact; 
+        //value <= alpha_original  {
+            //Flag::Upperbound
+        //} else if value >= beta {
+            //Flag::Lowerbound
+        //} else {
+            //Flag::Exact
+        //}; 
+ 
+    let zob_ret = ZobristReturn {
+        value: value,
+        depth: depth,
+        flag: flag,
+    };
+ 
+    zobrist_table.insert(hash, zob_ret);
+    scheduled_removal.push_back(hash); 
+  
+    while scheduled_removal.len() > capacity {
+        if let Some(zobrist) = scheduled_removal.pop_front() {
+            zobrist_table.remove(&zobrist);
+        }
+    }
+
+
+
+
     value
 }
