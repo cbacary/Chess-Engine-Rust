@@ -1,4 +1,4 @@
-use chess::{Square, Piece, Rank, File, Board, ChessMove, Color};
+use chess::{Board, ChessMove, Color, File, Piece, Rank, Square};
 
 /// Generates a pgn
 pub fn generate_pgn(
@@ -6,10 +6,10 @@ pub fn generate_pgn(
     chess_move: &Option<ChessMove>,
     color: Color,
     current_pgn: &String,
-    move_number: i32,) -> String {
+    move_number: i32,
+) -> String {
     match *chess_move {
         Some(i) => {
-            
             // Check white or black, create beginning
             let beginning = match color {
                 Color::White => {
@@ -113,7 +113,8 @@ pub fn generate_pgn(
                 check = "+".to_owned();
             }
             let full_string = format!(
-                "{beginning}{piece_str}{file}{rank}{capture}{destination}{promotion}{check} ");
+                "{beginning}{piece_str}{file}{rank}{capture}{destination}{promotion}{check} "
+            );
             let pgn = format!("{current_pgn}{full_string}");
 
             return pgn;
@@ -125,12 +126,15 @@ pub fn generate_pgn(
     }
 }
 
-pub fn create_board_from_pgn(pgn: String) -> Board{
+pub fn create_board_from_pgn(pgn: String) -> Board {
     let mut board = Board::default();
     let moves = pgn.split_whitespace();
     let mut index = 0;
     for i in moves {
-        if index % 3 == 0 {index += 1; continue;}
+        if index % 3 == 0 {
+            index += 1;
+            continue;
+        }
         let m = ChessMove::from_san(&board, i).expect("e");
         board = board.make_move_new(m);
         index += 1;

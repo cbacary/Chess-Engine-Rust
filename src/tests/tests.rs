@@ -6,33 +6,30 @@ static mut D: i64 = 0;
 
 #[inline]
 //fn run_perft_test(board: &mut Board, depth: u8) {
-    ////unsafe {
-        ////C += 1;
-    ////};
-    //if depth == 0 {
-        //return;
-    //}
-
-    //let moves = MoveGen::new_legal(&board);
-    //// Get move color
-    //// Get the enemy bitboard
-    //// if move.dest() is on enemy bitboard
-    //for i in moves {
-        //let capture = board.piece_on(i.get_dest());
-        //*board = board.make_move_new(i);
-        //let ep = board.en_passant();
-        //run_perft_test(board, depth - 1);
-        //*board = board.unmake_move_new(i, capture, ep);
-    //}
-
-    
-
+////unsafe {
+////C += 1;
+////};
+//if depth == 0 {
+//return;
 //}
 
-#[inline]
+//let moves = MoveGen::new_legal(&board);
+//// Get move color
+//// Get the enemy bitboard
+//// if move.dest() is on enemy bitboard
+//for i in moves {
+//let capture = board.piece_on(i.get_dest());
+//*board = board.make_move_new(i);
+//let ep = board.en_passant();
+//run_perft_test(board, depth - 1);
+//*board = board.unmake_move_new(i, capture, ep);
+//}
+
+//}
+#[allow(dead_code)]
 fn run_perft_test_correct(board: &Board, depth: u8) {
     //unsafe {
-        //D += 1;
+    //D += 1;
     //}
     if depth == 0 {
         return;
@@ -43,9 +40,9 @@ fn run_perft_test_correct(board: &Board, depth: u8) {
     for m in moves {
         let b = board.make_move_new(m);
         run_perft_test_correct(&b, depth - 1);
-
     }
 }
+#[allow(dead_code)]
 pub fn run_tests() {
     let mut board = Board::default();
     //run_perft_test(&mut board, 5);
@@ -58,7 +55,6 @@ pub fn run_tests() {
     let elapsed_time = now.elapsed();
     println!("{}", elapsed_time.as_nanos() / 1_000_000);
 
-    
     let now = Instant::now();
     for i in 0..3 {
         //run_perft_test(&mut board, 5);
@@ -66,10 +62,55 @@ pub fn run_tests() {
     let elapsed_time = now.elapsed();
     println!("{}", elapsed_time.as_nanos() / 1_000_000);
     //unsafe {
-        //println!("{}", C);
+    //println!("{}", C);
     //};
     //unsafe {
-        //println!("{}", D);
+    //println!("{}", D);
     //}
     assert_eq!(board, Board::default());
+}
+
+#[allow(dead_code)]
+pub fn convert_u64_to_bin(num: u64) -> u64 {
+    let mut num = num;
+    let mut s = String::from("");
+    while num > 0 {
+        if num % 2 == 0 {
+            s.push('0');
+        } else {
+            s.push('1');
+        }
+        num /= 2;
+    }
+    let sf: String = s.chars().rev().collect();
+    println!("{}", sf);
+    let mut index = 0;
+    for i in s.chars() {
+        print!(" | {} |", i);
+        index += 1;
+        if index == 8 {
+            index = 0;
+            println!("");
+        }
+    }
+    for i in 0..(64 - sf.len()) {
+        print!(" | 0 |");
+        index += 1;
+        if index == 8 {
+            index = 0;
+            println!("");
+        }
+    }
+    println!("");
+    let mut result: u64 = 0;
+    let mut index = 0;
+    let base: u64 = 2;
+    for i in sf.chars().rev() {
+        let a = i.to_digit(10).unwrap();
+        if a == 1 {
+            result += base.pow(index);
+        }
+        index += 1;
+    }
+    return result;
 }

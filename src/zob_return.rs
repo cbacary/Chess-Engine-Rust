@@ -1,12 +1,14 @@
+use chess::ChessMove;
+
 #[derive(PartialEq)]
 pub enum Flag {
     Exact,
     Upperbound,
-    Lowerbound
+    Lowerbound,
 }
 
 pub struct ZobristReturn {
     pub value: f64,
     pub depth: u8,
-    pub flag: Flag,
+    pub best_move: ChessMove,
 }
