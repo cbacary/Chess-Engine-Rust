@@ -53,8 +53,6 @@ pub fn generate_pgn(
             }
 
             // Check if pawn promotion
-            let mut promotion = "".to_owned();
-
             let promote = i.get_promotion();
             let promotion = match promote {
                 None => "".to_owned(),
@@ -99,7 +97,7 @@ pub fn generate_pgn(
 
             // Check if a capture
             let capture = match board.piece_on(i.get_dest()) {
-                Some(i) => "x",
+                Some(_) => "x",
                 None => "",
             };
 

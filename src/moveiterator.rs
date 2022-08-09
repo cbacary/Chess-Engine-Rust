@@ -32,8 +32,6 @@ impl MoveIterator {
             // We are basically going to set the first_move as the first_move
             // using an iterator mask
 
-            println!("HERHE");
-
             // First convert the chess move to a mask
             let dest = BitBoard::from_square(m.get_dest());
             self.iterator_mask = dest;
@@ -93,6 +91,40 @@ impl MoveIterator {
                 i += 1;
             }
         }
+    }
+
+    pub fn get_mask_index(&self) -> usize {
+        self.mask_index
+    }
+
+    pub fn len_all_moves(&self) -> usize {
+        let mut result = 0;
+        for i in 0..self.moves.len() {
+            if *self.moves[i].get_promotion() {
+                result += (self.moves[i].get_bitboard().popcnt() as usize) * NUM_PROMOTION_PIECES;
+            } else {
+                result += self.moves[i].get_bitboard().popcnt() as usize;
+            }
+        }
+        result
+    }
+}
+
+impl ExactSizeIterator for MoveIterator {
+    fn len(&self) -> usize {
+        let mut result = 0;
+        for i in 0..self.moves.len() {
+            if self.moves[i].get_bitboard() & self.iterator_mask == EMPTY {
+                break;
+            }
+            if *self.moves[i].get_promotion() {
+                result += ((self.moves[i].get_bitboard() & self.iterator_mask).popcnt() as usize)
+                    * NUM_PROMOTION_PIECES;
+            } else {
+                result += (self.moves[i].get_bitboard() & self.iterator_mask).popcnt() as usize;
+            }
+        }
+        result
     }
 }
 
