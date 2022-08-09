@@ -6,8 +6,10 @@ use chess::{Board, ChessMove, Color, Square, EMPTY};
 use fasthash::{xx, RandomState};
 use positions::{get_flipped_board_index, get_piece_value};
 use std::collections::{HashMap, VecDeque};
+use std::time::Instant;
 
 pub const INFINITY: f64 = f64::INFINITY;
+const GARBAGE_NODE: f64 = 7172626_f64;
 
 #[allow(dead_code)]
 pub fn calculate_distance(sq: Square, other: Square) -> i32 {
@@ -61,7 +63,9 @@ pub fn find_move(
     zobrist_table: &mut HashMap<u64, ZobristReturn, RandomState<xx::Hash64>>,
     scheduled_removal: &mut VecDeque<u64>,
     capacity: usize,
-    debug: bool,
+    first_move: Option<ChessMove>,
+    time_allowed: u128,
+    stopwatch: &Instant,
 ) -> Option<ChessMove> {
     let target_mask = *board.color_combined(!board.side_to_move());
 
@@ -69,12 +73,12 @@ pub fn find_move(
 
     let mut all_moves = MoveIterator::new_legal(&board, masks);
 
-    all_moves.set_first_mask(None);
+    all_moves.set_first_mask(first_move);
 
     let mut value = -INFINITY;
 
     //let mut current_best_move: Option<ChessMove> = None;
-    let mut current_best_move: Option<ChessMove> = None;
+    let mut current_best_move: Option<ChessMove> = first_move;
     let mut last = ChessMove::new(Square::A1, Square::G8, None);
 
     loop {
@@ -83,10 +87,18 @@ pub fn find_move(
                 break;
             }
             Some(i) => {
+
+                // I think we are going to only include this check at the 
+                // top level check. If we go over a little bit I think it 
+                // is okay. 
+                if stopwatch.elapsed().as_millis() >= time_allowed {
+                    break;
+                }
+
                 last = i;
 
                 let new_board = board.make_move_new(i);
-
+    
                 let child_node = -calc_move(
                     &new_board,
                     depth - 1,
@@ -97,7 +109,8 @@ pub fn find_move(
                     zobrist_table,
                     scheduled_removal,
                     capacity,
-                    false,
+                    time_allowed,
+                    stopwatch,
                 );
 
                 if child_node > value {
@@ -131,14 +144,17 @@ pub fn calc_move(
     zobrist_table: &mut HashMap<u64, ZobristReturn, RandomState<xx::Hash64>>,
     scheduled_removal: &mut VecDeque<u64>,
     capacity: usize,
-    _debug: bool,
+    time_allowed: u128,
+    stopwatch: &Instant,
+
 ) -> f64 {
-    let masks = vec![*board.color_combined(!board.side_to_move()), !EMPTY];
 
     let attack_moves_mask_index = 0;
     let empty_moves_mask_index = 1;
     
     let original_alpha = alpha;
+    
+    let masks = vec![*board.color_combined(!board.side_to_move()), !EMPTY];
 
     let mut all_moves = MoveIterator::new_legal(&board, masks);
 
@@ -158,21 +174,25 @@ pub fn calc_move(
     }
 
     let hash = board.get_hash();
-    let mut value = -INFINITY;
     let mut possible_best_move: Option<ChessMove> = None;
     let mut mask_offset = 0;
 
     if let Some(zob_val) = zobrist_table.get(&hash) {
-        let val = if zob_val.color_found != board.side_to_move() {-zob_val.value} else {zob_val.value};
+        let val = 
+            if zob_val.color_found != board.side_to_move() {-zob_val.value} 
+            else {zob_val.value};
         if zob_val.depth >= depth {
-            if zob_val.flag == Flag::Exact {
-                return val;
-            } else if zob_val.flag == Flag::Lowerbound {
-                alpha = f64::max(alpha, val);
-            } else  {
-                beta = f64::min(beta, val);
+            match zob_val.flag {
+                Flag::Exact => {
+                    return val;
+                },
+                Flag::Lowerbound => {
+                    alpha = f64::max(alpha, val);
+                }
+                Flag::Upperbound => {
+                    beta = f64::min(beta, val);
+                }
             }
-
             if alpha >= beta {
                 return val;
             }
@@ -185,6 +205,8 @@ pub fn calc_move(
     }
 
     all_moves.set_first_mask(possible_best_move);
+    
+    let mut value = -INFINITY;
 
     let mut current_best_move: Option<ChessMove> = None;
     let mut last = ChessMove::new(Square::A1, Square::G8, None);
@@ -197,6 +219,10 @@ pub fn calc_move(
             }
             Some(i) => {
                 // Implementation of negamax search w/ alpha-beta pruning
+
+                if time_allowed <= stopwatch.elapsed().as_millis() {
+                    return GARBAGE_NODE;
+                }
 
                 last = i;
 
@@ -227,12 +253,11 @@ pub fn calc_move(
                     zobrist_table,
                     scheduled_removal,
                     capacity,
-                    false,
+                    time_allowed, 
+                    stopwatch,
                 );
 
-                //value = f64::max(value, child_node);
-
-                if child_node > value {
+                if child_node > value && child_node.abs() != GARBAGE_NODE {
                     value = child_node;
                     current_best_move = Some(i);
                 }
@@ -250,7 +275,7 @@ pub fn calc_move(
         current_best_move = Some(last);
     }
 
-    let flag = 
+    let flag =
         if value <= original_alpha { // This means
             Flag::Upperbound
         } else if value >= beta { // This means that this node had a prune take place
